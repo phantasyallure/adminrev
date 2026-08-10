@@ -2,17 +2,18 @@ import { useEffect, useState } from 'react'
 import AdminLayout from '../components/AdminLayout'
 import { useAdminAuth } from '../context/AdminAuthContext'
 import {
-  fetchBadges, createBadge, deleteBadge, awardBadge, fetchTopReviewers,
+  fetchBadges, createBadge, deleteBadge, awardBadge, fetchTopReviewers, uploadBadgeIcon, findProfileByName,
 } from '../lib/adminApi'
-import { findProfileByName } from '../lib/adminApi'
 
 export default function Badges() {
   const { user } = useAdminAuth()
   const [badges, setBadges] = useState([])
   const [topReviewers, setTopReviewers] = useState([])
   const [name, setName] = useState('')
-  const [icon, setIcon] = useState('🏆')
-  const [color, setColor] = useState('#e4634a')
+  const [iconUrl, setIconUrl] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
 
   const [awardUserQuery, setAwardUserQuery] = useState('')
   const [awardResults, setAwardResults] = useState([])
@@ -25,11 +26,39 @@ export default function Badges() {
   }
   useEffect(load, [])
 
+  const handleIconFile = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    setCreateError('')
+    try {
+      const url = await uploadBadgeIcon(file)
+      setIconUrl(url)
+    } catch (err) {
+      setCreateError(err.message)
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const handleCreateBadge = async (e) => {
     e.preventDefault()
-    await createBadge({ name, icon, color })
-    setName(''); setIcon('🏆'); setColor('#e4634a')
-    load()
+    if (!iconUrl) {
+      setCreateError('Upload an icon image first.')
+      return
+    }
+    setCreating(true)
+    setCreateError('')
+    try {
+      await createBadge({ name, icon_url: iconUrl, icon: '🏅' })
+      setName('')
+      setIconUrl('')
+      load()
+    } catch (err) {
+      setCreateError(err.message)
+    } finally {
+      setCreating(false)
+    }
   }
 
   const searchUsers = async (q) => {
@@ -56,7 +85,7 @@ export default function Badges() {
       <div className="page-head">
         <div>
           <h1 style={{ fontSize: 24 }}>Badges</h1>
-          <p>Create badge types (e.g. "Top Reviewer") and award them to users.</p>
+          <p>Create badge types with real artwork and award them to users.</p>
         </div>
       </div>
 
@@ -64,27 +93,29 @@ export default function Badges() {
         <div className="card">
           <h3 style={{ marginBottom: 14 }}>Create a badge</h3>
           <form onSubmit={handleCreateBadge} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div className="form-grid">
-              <div className="field">
-                <label>Name</label>
-                <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Top Reviewer" />
-              </div>
-              <div className="field">
-                <label>Emoji</label>
-                <input value={icon} onChange={(e) => setIcon(e.target.value)} maxLength={4} />
-              </div>
+            <div className="field">
+              <label>Name</label>
+              <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Verified Reviewer" />
             </div>
             <div className="field">
-              <label>Color</label>
-              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} style={{ width: 60, height: 36, padding: 2 }} />
+              <label>Icon image (SVG or PNG)</label>
+              <input type="file" accept="image/*,.svg" onChange={handleIconFile} />
+              {uploading && <span className="muted">Uploading…</span>}
+              {iconUrl && <img src={iconUrl} alt="" style={{ width: 56, height: 56, marginTop: 6 }} />}
             </div>
-            <button className="btn-primary btn-small" type="submit" style={{ alignSelf: 'flex-start' }}>Create badge</button>
+            {createError && <p className="error-text">{createError}</p>}
+            <button className="btn-primary btn-small" type="submit" disabled={creating || uploading} style={{ alignSelf: 'flex-start' }}>
+              {creating ? 'Saving…' : 'Create badge'}
+            </button>
           </form>
 
           <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {badges.map((b) => (
               <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>{b.icon} {b.name}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {b.icon_url ? <img src={b.icon_url} alt="" style={{ width: 24, height: 24 }} /> : b.icon}
+                  {b.name}
+                </span>
                 <button className="btn-ghost btn-small" onClick={() => deleteBadge(b.id).then(load)}>Remove</button>
               </div>
             ))}
@@ -97,7 +128,7 @@ export default function Badges() {
             <label>Badge</label>
             <select value={awardBadgeId} onChange={(e) => setAwardBadgeId(e.target.value)}>
               <option value="">Choose a badge…</option>
-              {badges.map((b) => <option key={b.id} value={b.id}>{b.icon} {b.name}</option>)}
+              {badges.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
           <div className="field">
