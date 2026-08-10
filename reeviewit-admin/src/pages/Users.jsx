@@ -84,7 +84,11 @@ export default function Users() {
                     <td>{u.reviewCount}</td>
                     <td>
                       {u.badges.length === 0 ? <span className="muted">—</span> : u.badges.map((b) => (
-                        <span key={b.id} title={b.name} style={{ marginRight: 4 }}>{b.icon}</span>
+                        b.icon_url ? (
+                          <img key={b.id} src={b.icon_url} alt={b.name} title={b.name} style={{ width: 20, height: 20, marginRight: 4 }} />
+                        ) : (
+                          <span key={b.id} title={b.name} style={{ marginRight: 4 }}>{b.icon}</span>
+                        )
                       ))}
                     </td>
                     <td><span className={`badge-pill ${u.is_banned ? 'badge-banned' : 'badge-active'}`}>{u.is_banned ? 'Banned' : 'Active'}</span></td>
