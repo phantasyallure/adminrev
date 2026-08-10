@@ -137,8 +137,8 @@ export async function uploadPlacePhoto(file) {
 // Builds the Edge Function URL from the same Supabase project URL already
 // configured in .env — no separate setting needed.
 export function functionUrl(name) {
-  const base = import.meta.env.VITE_SUPABASE_URL?.replace('.supabase.co', '.functions.supabase.co') ?? ''
-  return `${base}/${name}`
+  const base = import.meta.env.VITE_SUPABASE_URL ?? ''
+  return `${base}/functions/v1/${name}`
 }
 
 // ---------- Users ----------
