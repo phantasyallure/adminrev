@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import AdminLayout from '../components/AdminLayout'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { PERMISSIONS, useAdminAuth } from '../context/AdminAuthContext'
-import { fetchAdmins, findProfileByName, upsertAdmin, removeAdmin } from '../lib/adminApi'
+import { fetchAdmins, createStaffAdmin, removeAdmin } from '../lib/adminApi'
 
 const PRESETS = {
   Moderator: { can_approve_reviews: true, can_delete_reviews: true },
@@ -15,24 +15,25 @@ function emptyPerms() {
   return Object.fromEntries(PERMISSIONS.map((p) => [p.key, false]))
 }
 
+function randomPassword() {
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 14)
+}
+
 export default function Roles() {
-  const { user } = useAdminAuth()
+  const { session } = useAdminAuth()
   const [admins, setAdmins] = useState([])
-  const [q, setQ] = useState('')
-  const [results, setResults] = useState([])
-  const [selected, setSelected] = useState(null) // profile being granted a role
+  const [removeTarget, setRemoveTarget] = useState(null)
+
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState(randomPassword())
   const [roleLabel, setRoleLabel] = useState('Moderator')
   const [perms, setPerms] = useState(PRESETS.Moderator)
-  const [removeTarget, setRemoveTarget] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
 
   const load = () => fetchAdmins().then(setAdmins).catch(console.error)
   useEffect(load, [])
-
-  const search = async (val) => {
-    setQ(val)
-    if (val.trim().length < 2) { setResults([]); return }
-    setResults(await findProfileByName(val))
-  }
 
   const applyPreset = (label) => {
     setRoleLabel(label)
@@ -41,11 +42,22 @@ export default function Roles() {
 
   const togglePerm = (key) => setPerms((p) => ({ ...p, [key]: !p[key] }))
 
-  const grant = async () => {
-    await upsertAdmin(selected.id, { role_label: roleLabel, ...perms }, user.id)
-    setSelected(null)
-    setQ(''); setResults([])
-    load()
+  const handleCreate = async (e) => {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+    setSaving(true)
+    try {
+      await createStaffAdmin({ email, password, roleLabel, permissions: perms }, session.access_token)
+      setSuccess(`Account created. Share these credentials with them directly — email: ${email}, password: ${password}`)
+      setEmail('')
+      setPassword(randomPassword())
+      load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const confirmRemove = async () => {
@@ -59,7 +71,7 @@ export default function Roles() {
       <div className="page-head">
         <div>
           <h1 style={{ fontSize: 24 }}>Admin roles</h1>
-          <p>Decide who can approve reviews, manage places, ban users, or manage other admins.</p>
+          <p>Create standalone admin logins — separate from reviewer accounts — and decide what each can do.</p>
         </div>
       </div>
 
@@ -84,55 +96,54 @@ export default function Roles() {
                     </td>
                   </tr>
                 ))}
+                {admins.length === 0 && (
+                  <tr><td colSpan={4} className="muted">No admins yet.</td></tr>
+                )}
               </tbody>
             </table>
           </div>
         </div>
 
         <div className="card">
-          <h3 style={{ marginBottom: 14 }}>Grant admin access</h3>
-          <div className="field" style={{ marginBottom: 12 }}>
-            <label>Find an existing user by name</label>
-            <input value={q} onChange={(e) => search(e.target.value)} placeholder="They must already have a Reeviewit account" />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-            {results.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                className={`btn-ghost btn-small`}
-                style={{ justifyContent: 'flex-start', borderColor: selected?.id === r.id ? 'var(--ink)' : undefined }}
-                onClick={() => setSelected(r)}
-              >
-                {r.display_name}
-              </button>
-            ))}
-          </div>
-
-          {selected && (
-            <>
-              <p style={{ marginBottom: 10 }}>Granting access to <strong>{selected.display_name}</strong></p>
-              <div className="field" style={{ marginBottom: 10 }}>
-                <label>Role label</label>
-                <select value={roleLabel} onChange={(e) => applyPreset(e.target.value)}>
-                  {Object.keys(PRESETS).map((k) => <option key={k} value={k}>{k}</option>)}
-                  <option value="Custom">Custom</option>
-                </select>
+          <h3 style={{ marginBottom: 6 }}>Create an admin account</h3>
+          <p className="muted" style={{ marginBottom: 14 }}>
+            This creates a brand-new login just for this panel — no email confirmation, and no connection
+            to any reviewer or Google account on the main site.
+          </p>
+          <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="field">
+              <label>Email</label>
+              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="moderator@yourteam.com" />
+            </div>
+            <div className="field">
+              <label>Password</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
+                <button type="button" className="btn-ghost btn-small" onClick={() => setPassword(randomPassword())}>Generate</button>
               </div>
-              <div style={{ marginBottom: 14 }}>
-                {PERMISSIONS.map((p) => (
-                  <label key={p.key} className="checkbox-row">
-                    <input type="checkbox" checked={Boolean(perms[p.key])} onChange={() => togglePerm(p.key)} />
-                    {p.label}
-                  </label>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button className="btn-ghost btn-small" onClick={() => setSelected(null)}>Cancel</button>
-                <button className="btn-primary btn-small" onClick={grant}>Grant access</button>
-              </div>
-            </>
-          )}
+              <span className="muted">Give this to them yourself — there's no invite email.</span>
+            </div>
+            <div className="field">
+              <label>Role label</label>
+              <select value={roleLabel} onChange={(e) => applyPreset(e.target.value)}>
+                {Object.keys(PRESETS).map((k) => <option key={k} value={k}>{k}</option>)}
+                <option value="Custom">Custom</option>
+              </select>
+            </div>
+            <div>
+              {PERMISSIONS.map((p) => (
+                <label key={p.key} className="checkbox-row">
+                  <input type="checkbox" checked={Boolean(perms[p.key])} onChange={() => togglePerm(p.key)} />
+                  {p.label}
+                </label>
+              ))}
+            </div>
+            {error && <p className="error-text">{error}</p>}
+            {success && <p className="muted" style={{ color: 'var(--ok)' }}>{success}</p>}
+            <button className="btn-primary btn-small" type="submit" disabled={saving} style={{ alignSelf: 'flex-start' }}>
+              {saving ? 'Creating…' : 'Create account'}
+            </button>
+          </form>
         </div>
       </div>
 
