@@ -134,12 +134,20 @@ export async function uploadPlacePhoto(file) {
   return data.publicUrl
 }
 
+// Builds the Edge Function URL from the same Supabase project URL already
+// configured in .env — no separate setting needed.
+export function functionUrl(name) {
+  const base = import.meta.env.VITE_SUPABASE_URL?.replace('.supabase.co', '.functions.supabase.co') ?? ''
+  return `${base}/${name}`
+}
+
 // ---------- Users ----------
 
 export async function fetchUsers({ q = '' } = {}) {
   let query = supabase
     .from('profiles')
-    .select('id, display_name, avatar_url, is_banned, banned_reason, is_deleted, created_at')
+    .select('id, display_name, avatar_url, is_banned, banned_reason, is_deleted, is_staff, created_at')
+    .eq('is_staff', false)
     .order('created_at', { ascending: false })
   if (q) query = query.ilike('display_name', `%${q}%`)
   const { data, error } = await query
@@ -148,7 +156,7 @@ export async function fetchUsers({ q = '' } = {}) {
   const { data: counts } = await supabase.from('user_review_counts').select('user_id, review_count')
   const byUser = Object.fromEntries((counts ?? []).map((c) => [c.user_id, c.review_count]))
 
-  const { data: badges } = await supabase.from('user_badges').select('user_id, badges:badge_id ( id, name, icon, color )')
+  const { data: badges } = await supabase.from('user_badges').select('user_id, badges:badge_id ( id, name, icon, icon_url, color )')
   const badgesByUser = {}
   for (const b of badges ?? []) {
     if (!badgesByUser[b.user_id]) badgesByUser[b.user_id] = []
@@ -178,8 +186,8 @@ export async function softDeleteUser(userId) {
   if (error) throw error
 }
 
-export async function hardDeleteUser(userId, functionsUrl, accessToken) {
-  const res = await fetch(functionsUrl, {
+export async function hardDeleteUser(userId, accessToken) {
+  const res = await fetch(functionUrl('admin-delete-user'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ targetUserId: userId }),
@@ -207,6 +215,15 @@ export async function createBadge(badge) {
 export async function deleteBadge(id) {
   const { error } = await supabase.from('badges').delete().eq('id', id)
   if (error) throw error
+}
+
+export async function uploadBadgeIcon(file) {
+  const ext = file.name.split('.').pop() || 'svg'
+  const path = `${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage.from('badge-icons').upload(path, file, { upsert: true })
+  if (error) throw error
+  const { data } = supabase.storage.from('badge-icons').getPublicUrl(path)
+  return data.publicUrl
 }
 
 export async function awardBadge(userId, badgeId, awardedBy) {
@@ -244,6 +261,22 @@ export async function findProfileByName(q) {
   const { data, error } = await supabase.from('profiles').select('id, display_name, avatar_url').ilike('display_name', `%${q}%`).limit(10)
   if (error) throw error
   return data ?? []
+}
+
+// Creates a brand-new login just for the admin panel (email + password, no
+// email confirmation, no link to any reviewer/Google account) and grants it
+// permissions in one call. Requires the admin-create-user Edge Function.
+export async function createStaffAdmin({ email, password, roleLabel, permissions }, accessToken) {
+  const res = await fetch(functionUrl('admin-create-user'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ email, password, roleLabel, permissions }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error || 'Could not create account')
+  }
+  return res.json()
 }
 
 export async function upsertAdmin(userId, permissions, createdBy) {
