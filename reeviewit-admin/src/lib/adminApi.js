@@ -267,7 +267,7 @@ export async function findProfileByName(q) {
 // email confirmation, no link to any reviewer/Google account) and grants it
 // permissions in one call. Requires the admin-create-user Edge Function.
 export async function createStaffAdmin({ email, password, roleLabel, permissions }, accessToken) {
-  const res = await fetch(functionUrl('admin-create-user'), {
+  const res = await fetch(functionUrl('super-endpoint'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ email, password, roleLabel, permissions }),
