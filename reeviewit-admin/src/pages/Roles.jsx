@@ -75,7 +75,7 @@ export default function Roles() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 18 }}>
+     <div className="two-col">
         <div className="card">
           <h3 style={{ marginBottom: 14 }}>Current admins</h3>
           <div className="table-wrap">
