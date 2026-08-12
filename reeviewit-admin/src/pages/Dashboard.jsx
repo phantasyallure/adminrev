@@ -42,7 +42,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+      <div className="two-col even">
         {hasPermission('can_approve_reviews') && (
           <div className="card">
             <h3 style={{ marginBottom: 10 }}>Moderation queue</h3>
