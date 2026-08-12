@@ -305,3 +305,25 @@ export async function fetchDashboardStats() {
     bannedUsers: bannedUsers ?? 0,
   }
 }
+// ---------- Place suggestions ----------
+
+export async function fetchPlaceSuggestions({ status = 'pending' } = {}) {
+  let query = supabase
+    .from('place_suggestions')
+    .select('*, profiles:submitted_by ( display_name )')
+    .order('created_at', { ascending: false })
+  if (status !== 'all') query = query.eq('status', status)
+  const { data, error } = await query
+  if (error) throw error
+  return data ?? []
+}
+
+export async function setSuggestionStatus(id, status) {
+  const { error } = await supabase.from('place_suggestions').update({ status }).eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteSuggestion(id) {
+  const { error } = await supabase.from('place_suggestions').delete().eq('id', id)
+  if (error) throw error
+}
