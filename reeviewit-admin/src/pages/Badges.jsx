@@ -136,7 +136,7 @@ export default function Badges() {
             <input value={awardUserQuery} onChange={(e) => searchUsers(e.target.value)} placeholder="Type a name…" />
           </div>
           {message && <p className="muted" style={{ marginTop: 8 }}>{message}</p>}
-          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className="two-col even" style={{ marginBottom: 18 }}>
             {awardResults.map((r) => (
               <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>{r.display_name}</span>
