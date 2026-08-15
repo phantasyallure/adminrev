@@ -4,6 +4,7 @@ import { useAdminAuth } from '../context/AdminAuthContext'
 const LINKS = [
   { to: '/', label: 'Dashboard', icon: '⌂', requires: null, end: true },
   { to: '/reviews', label: 'Reviews', icon: '★', requires: 'can_approve_reviews' },
+  { to: '/products', label: 'Products', icon: '▣', requires: 'can_approve_reviews' },
   { to: '/places', label: 'Places', icon: '⚑', requires: 'can_manage_places' },
   { to: '/suggestions', label: 'Suggestions', icon: '✎', requires: 'can_manage_places' },
   { to: '/users', label: 'Users', icon: '◎', requires: 'can_ban_users' },
