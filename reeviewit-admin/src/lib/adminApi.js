@@ -31,6 +31,37 @@ export async function deleteReview(reviewId) {
   if (error) throw error
 }
 
+// ---------- Product posts ----------
+
+export async function fetchProductPosts({ status = 'pending', q = '' } = {}) {
+  let query = supabase
+    .from('product_posts')
+    .select(
+      'id, image_url, caption, keywords, status, created_at, user_id, place_id, profiles:user_id ( display_name ), places:place_id ( name )'
+    )
+    .order('created_at', { ascending: false })
+
+  if (status !== 'all') query = query.eq('status', status)
+  if (q) query = query.or(`caption.ilike.%${q}%,keywords.cs.{${q.toLowerCase()}}`)
+
+  const { data, error } = await query
+  if (error) throw error
+  return data ?? []
+}
+
+export async function setProductPostStatus(postId, status, moderatorId) {
+  const { error } = await supabase
+    .from('product_posts')
+    .update({ status, moderated_by: moderatorId, moderated_at: new Date().toISOString() })
+    .eq('id', postId)
+  if (error) throw error
+}
+
+export async function deleteProductPost(postId) {
+  const { error } = await supabase.from('product_posts').delete().eq('id', postId)
+  if (error) throw error
+}
+
 // ---------- Places ----------
 
 const PLACE_COLUMNS =
@@ -292,14 +323,16 @@ export async function removeAdmin(userId) {
 // ---------- Dashboard ----------
 
 export async function fetchDashboardStats() {
-  const [{ count: pendingReviews }, { count: totalPlaces }, { count: totalUsers }, { count: bannedUsers }] = await Promise.all([
+  const [{ count: pendingReviews }, { count: pendingProductPosts }, { count: totalPlaces }, { count: totalUsers }, { count: bannedUsers }] = await Promise.all([
     supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('product_posts').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
     supabase.from('places').select('*', { count: 'exact', head: true }),
     supabase.from('profiles').select('*', { count: 'exact', head: true }),
     supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('is_banned', true),
   ])
   return {
     pendingReviews: pendingReviews ?? 0,
+    pendingProductPosts: pendingProductPosts ?? 0,
     totalPlaces: totalPlaces ?? 0,
     totalUsers: totalUsers ?? 0,
     bannedUsers: bannedUsers ?? 0,
