@@ -29,6 +29,10 @@ export default function Dashboard() {
           <div className="label">Reviews awaiting approval</div>
         </div>
         <div className="stat-card">
+          <div className="num">{stats?.pendingProductPosts ?? '—'}</div>
+          <div className="label">Products awaiting approval</div>
+        </div>
+        <div className="stat-card">
           <div className="num">{stats?.totalPlaces ?? '—'}</div>
           <div className="label">Places listed</div>
         </div>
@@ -52,6 +56,18 @@ export default function Dashboard() {
                 : 'Nothing waiting — queue is clear.'}
             </p>
             <Link className="btn-primary btn-small" to="/reviews">Go to reviews</Link>
+          </div>
+        )}
+
+        {hasPermission('can_approve_reviews') && (
+          <div className="card">
+            <h3 style={{ marginBottom: 10 }}>Product moderation queue</h3>
+            <p style={{ marginBottom: 16 }}>
+              {stats?.pendingProductPosts
+                ? `${stats.pendingProductPosts} product post${stats.pendingProductPosts === 1 ? '' : 's'} waiting for a decision.`
+                : 'Nothing waiting — queue is clear.'}
+            </p>
+            <Link className="btn-primary btn-small" to="/products">Go to products</Link>
           </div>
         )}
 
