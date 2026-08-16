@@ -65,7 +65,7 @@ export async function deleteProductPost(postId) {
 // ---------- Places ----------
 
 const PLACE_COLUMNS =
-  'id, name, slug, category, neighborhood, address, lat, lng, price_range, cover_image_url, keywords, google_maps_url, created_at'
+  'id, name, slug, category, neighborhood, address, lat, lng, price_range, cover_image_url, keywords, google_maps_url, featured_rank, created_at'
 
 // Best-effort: pull lat/lng out of a pasted Google Maps link when the URL
 // happens to contain them (e.g. ".../@35.6969,-0.6335,15z" or
@@ -153,6 +153,16 @@ export async function updatePlace(id, place) {
 
 export async function deletePlace(id) {
   const { error } = await supabase.from('places').delete().eq('id', id)
+  if (error) throw error
+}
+
+// Sets/clears a place's spot in the homepage carousel. Pass null to remove
+// it from the featured strip. Lower numbers show first.
+export async function setPlaceFeaturedRank(id, rank) {
+  const { error } = await supabase
+    .from('places')
+    .update({ featured_rank: rank })
+    .eq('id', id)
   if (error) throw error
 }
 
