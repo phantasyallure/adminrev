@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { compressImage } from './imageCompress'
 
 // ---------- Reviews ----------
 
@@ -167,12 +168,47 @@ export async function setPlaceFeaturedRank(id, rank) {
 }
 
 export async function uploadPlacePhoto(file) {
-  const ext = file.name.split('.').pop() || 'jpg'
-  const path = `${crypto.randomUUID()}.${ext}`
-  const { error } = await supabase.storage.from('place-photos').upload(path, file, { upsert: true })
+  const compressed = await compressImage(file)
+  const path = `${crypto.randomUUID()}.jpg`
+  const { error } = await supabase.storage
+    .from('place-photos')
+    .upload(path, compressed, { upsert: true, contentType: 'image/jpeg' })
   if (error) throw error
   const { data } = supabase.storage.from('place-photos').getPublicUrl(path)
   return data.publicUrl
+}
+
+// ---------- Category images (homepage tiles: restaurant / cafeteria / etc.) ----------
+
+export async function fetchCategoryImages() {
+  const { data, error } = await supabase.from('category_images').select('category, image_url, updated_at')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function uploadCategoryImage(category, file) {
+  const compressed = await compressImage(file)
+  const path = `${category}-${crypto.randomUUID()}.jpg`
+  const { error: uploadError } = await supabase.storage
+    .from('category-images')
+    .upload(path, compressed, { upsert: true, contentType: 'image/jpeg' })
+  if (uploadError) throw uploadError
+  const { data: urlData } = supabase.storage.from('category-images').getPublicUrl(path)
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  const { data, error } = await supabase
+    .from('category_images')
+    .upsert(
+      { category, image_url: urlData.publicUrl, updated_at: new Date().toISOString(), updated_by: user?.id ?? null },
+      { onConflict: 'category' }
+    )
+    .select()
+    .single()
+  if (error) throw error
+  return data
 }
 
 // Builds the Edge Function URL from the same Supabase project URL already
