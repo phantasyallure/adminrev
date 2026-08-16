@@ -3,7 +3,7 @@ import AdminLayout from '../components/AdminLayout'
 import SearchInput from '../components/SearchInput'
 import ConfirmDialog from '../components/ConfirmDialog'
 import PlaceFormModal from '../components/PlaceFormModal'
-import { fetchPlaces, deletePlace } from '../lib/adminApi'
+import { fetchPlaces, deletePlace, setPlaceFeaturedRank } from '../lib/adminApi'
 
 export default function Places() {
   const [q, setQ] = useState('')
@@ -28,12 +28,26 @@ export default function Places() {
     load()
   }
 
+  const handleFeaturedChange = async (place, value) => {
+    const rank = value === '' ? null : Number(value)
+    setPlaces((prev) => prev.map((p) => (p.id === place.id ? { ...p, featured_rank: rank } : p)))
+    try {
+      await setPlaceFeaturedRank(place.id, rank)
+    } catch (err) {
+      console.error(err)
+      load()
+    }
+  }
+
   return (
     <AdminLayout title="Places">
       <div className="page-head">
         <div>
           <h1 style={{ fontSize: 24 }}>Restaurants & cafeterias</h1>
           <p>Add listings and keywords so people can search by dish, cuisine, or vibe.</p>
+          <p className="muted" style={{ marginTop: 4 }}>
+            Give a place a "Featured" number to put it in the homepage carousel (1 shows first). Leave it blank to keep it off the homepage.
+          </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <SearchInput value={q} onChange={setQ} placeholder="Search places…" />
@@ -56,6 +70,7 @@ export default function Places() {
                   <th>Category</th>
                   <th>Keywords</th>
                   <th>Rating</th>
+                  <th>Featured</th>
                   <th></th>
                 </tr>
               </thead>
@@ -72,6 +87,16 @@ export default function Places() {
                     <td>{p.category}</td>
                     <td style={{ maxWidth: 220 }}>{(p.keywords || []).join(', ') || <span className="muted">—</span>}</td>
                     <td>{p.score ? `${Number(p.score).toFixed(1)} ★ (${p.reviewCount})` : <span className="muted">No reviews</span>}</td>
+                    <td>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="—"
+                        value={p.featured_rank ?? ''}
+                        onChange={(e) => handleFeaturedChange(p, e.target.value)}
+                        style={{ width: 56 }}
+                      />
+                    </td>
                     <td>
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button className="btn-ghost btn-small" onClick={() => setEditing(p)}>Edit</button>
