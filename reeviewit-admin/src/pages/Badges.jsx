@@ -89,7 +89,7 @@ export default function Badges() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 18 }}>
+      <div className="two-col even" style={{ marginBottom: 18 }}>
         <div className="card">
           <h3 style={{ marginBottom: 14 }}>Create a badge</h3>
           <form onSubmit={handleCreateBadge} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
