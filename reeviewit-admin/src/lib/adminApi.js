@@ -65,7 +65,7 @@ export async function deleteProductPost(postId) {
 // ---------- Places ----------
 
 const PLACE_COLUMNS =
-  'id, name, slug, category, neighborhood, address, lat, lng, price_range, cover_image_url, keywords, google_maps_url, featured_rank, created_at'
+  'id, name, slug, category, neighborhood, address, lat, lng, price_range, cover_image_url, keywords, google_maps_url, featured_rank, created_at, google_rating, google_rating_count'
 
 // Best-effort: pull lat/lng out of a pasted Google Maps link when the URL
 // happens to contain them (e.g. ".../@35.6969,-0.6335,15z" or
@@ -368,5 +368,156 @@ export async function setSuggestionStatus(id, status) {
 
 export async function deleteSuggestion(id) {
   const { error } = await supabase.from('place_suggestions').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ---------- Bulk place import (Google Maps scrape → Excel → review → publish) ----------
+
+// Expected Excel headers (case/space-insensitive): Name, Category,
+// Neighborhood, Address, Keywords, Google Maps Link, Google Rating,
+// Google Rating Count, Photo URL. Missing optional columns are fine.
+const IMPORT_HEADER_ALIASES = {
+  name: 'name',
+  category: 'category',
+  neighborhood: 'neighborhood',
+  address: 'address',
+  keywords: 'keywords',
+  googlemapslink: 'google_maps_url',
+  googlemapsurl: 'google_maps_url',
+  googlerating: 'google_rating',
+  rating: 'google_rating',
+  googleratingcount: 'google_rating_count',
+  ratingcount: 'google_rating_count',
+  reviewcount: 'google_rating_count',
+  photourl: 'photo_url',
+  photo: 'photo_url',
+  imageurl: 'photo_url',
+}
+
+function normalizeHeader(h) {
+  return String(h ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+// Takes rows as parsed by SheetJS's sheet_to_json({ header: 1 }) — i.e. an
+// array of arrays, first row is headers — and maps them into place_imports
+// rows. Rows without a name are skipped.
+export function mapImportSheetRows(sheetRows) {
+  if (!sheetRows.length) return []
+  const headers = sheetRows[0].map(normalizeHeader)
+  const fieldForCol = headers.map((h) => IMPORT_HEADER_ALIASES[h] || null)
+
+  return sheetRows.slice(1).map((row) => {
+    const rec = {}
+    fieldForCol.forEach((field, i) => {
+      if (!field) return
+      const raw = row[i]
+      if (raw === undefined || raw === null || raw === '') return
+      if (field === 'keywords') {
+        rec.keywords = String(raw).split(',').map((k) => k.trim()).filter(Boolean)
+      } else if (field === 'google_rating') {
+        rec.google_rating = Number(raw) || null
+      } else if (field === 'google_rating_count') {
+        rec.google_rating_count = parseInt(raw, 10) || null
+      } else {
+        rec[field] = String(raw).trim()
+      }
+    })
+    return rec
+  }).filter((r) => r.name)
+}
+
+export async function stagePlaceImports(rows, { batchLabel, createdBy } = {}) {
+  if (!rows.length) return []
+  const payload = rows.map((r) => ({
+    name: r.name,
+    category: r.category || 'restaurant',
+    neighborhood: r.neighborhood || null,
+    address: r.address || null,
+    keywords: r.keywords || [],
+    google_maps_url: r.google_maps_url || null,
+    google_rating: r.google_rating ?? null,
+    google_rating_count: r.google_rating_count ?? null,
+    photo_url: r.photo_url || null,
+    batch_label: batchLabel || null,
+    created_by: createdBy || null,
+  }))
+  const { data, error } = await supabase.from('place_imports').insert(payload).select()
+  if (error) throw error
+  return data ?? []
+}
+
+export async function fetchPlaceImports({ status = 'pending' } = {}) {
+  let query = supabase.from('place_imports').select('*').order('created_at', { ascending: true })
+  if (status !== 'all') query = query.eq('status', status)
+  const { data, error } = await query
+  if (error) throw error
+  return data ?? []
+}
+
+export async function updatePlaceImport(id, patch) {
+  const { error } = await supabase.from('place_imports').update(patch).eq('id', id)
+  if (error) throw error
+}
+
+export async function deletePlaceImport(id) {
+  const { error } = await supabase.from('place_imports').delete().eq('id', id)
+  if (error) throw error
+}
+
+async function rehostImportPhoto(photoUrl, accessToken) {
+  const res = await fetch(functionUrl('import-place-photo'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ photoUrl }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error || 'Photo import failed')
+  }
+  const { url } = await res.json()
+  return url
+}
+
+// Publishes one staged row: re-hosts its photo (if any), inserts the real
+// place, marks the import row published. Throws with the row's error stored
+// on failure so the review queue can show it inline and let the admin retry.
+export async function publishPlaceImport(row, accessToken) {
+  try {
+    let coverImageUrl = row.hosted_photo_url || null
+    if (!coverImageUrl && row.photo_url) {
+      coverImageUrl = await rehostImportPhoto(row.photo_url, accessToken)
+    }
+
+    const place = await createPlace({
+      name: row.name,
+      category: row.category,
+      neighborhood: row.neighborhood,
+      address: row.address,
+      keywords: row.keywords,
+      google_maps_url: row.google_maps_url,
+      cover_image_url: coverImageUrl,
+    })
+
+    if (row.google_rating != null || row.google_rating_count != null) {
+      await supabase
+        .from('places')
+        .update({ google_rating: row.google_rating, google_rating_count: row.google_rating_count })
+        .eq('id', place.id)
+    }
+
+    await supabase
+      .from('place_imports')
+      .update({ status: 'published', hosted_photo_url: coverImageUrl, error: null, published_at: new Date().toISOString() })
+      .eq('id', row.id)
+
+    return place
+  } catch (err) {
+    await supabase.from('place_imports').update({ error: err.message }).eq('id', row.id)
+    throw err
+  }
+}
+
+export async function skipPlaceImport(id) {
+  const { error } = await supabase.from('place_imports').update({ status: 'skipped' }).eq('id', id)
   if (error) throw error
 }
