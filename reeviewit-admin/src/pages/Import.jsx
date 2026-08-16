@@ -5,7 +5,7 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import { useAdminAuth } from '../context/AdminAuthContext'
 import {
   mapImportSheetRows, stagePlaceImports, fetchPlaceImports,
-  updatePlaceImport, deletePlaceImport, publishPlaceImport, skipPlaceImport,
+  updatePlaceImport, deletePlaceImport, publishPlaceImport, skipPlaceImport, uploadPlacePhoto,
 } from '../lib/adminApi'
 
 const TABS = [
@@ -26,7 +26,9 @@ export default function Import() {
   const [publishingAll, setPublishingAll] = useState(false)
   const [pendingDelete, setPendingDelete] = useState(null)
   const [editingId, setEditingId] = useState(null)
+  const [uploadingPhotoId, setUploadingPhotoId] = useState(null)
   const fileInput = useRef(null)
+  const photoInputs = useRef({})
 
   const load = () => {
     setLoading(true)
@@ -105,6 +107,23 @@ export default function Import() {
     load()
   }
 
+  const handlePhotoFile = async (row, e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingPhotoId(row.id)
+    try {
+      const url = await uploadPlacePhoto(file)
+      setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, hosted_photo_url: url } : r)))
+      await updatePlaceImport(row.id, { hosted_photo_url: url })
+    } catch (err) {
+      console.error(err)
+      setUploadError(err.message || 'Photo upload failed.')
+    } finally {
+      setUploadingPhotoId(null)
+      if (photoInputs.current[row.id]) photoInputs.current[row.id].value = ''
+    }
+  }
+
   const pendingCount = rows.filter((r) => r.status === 'pending').length
 
   return (
@@ -162,6 +181,7 @@ export default function Import() {
                   <th>Category</th>
                   <th>Neighborhood</th>
                   <th>Keywords</th>
+                  <th>Map</th>
                   <th>Google rating</th>
                   <th></th>
                 </tr>
@@ -170,11 +190,30 @@ export default function Import() {
                 {rows.map((r) => (
                   <tr key={r.id}>
                     <td>
-                      <img
-                        src={r.hosted_photo_url || r.photo_url || 'https://api.dicebear.com/7.x/shapes/svg?seed=' + r.id}
-                        alt=""
-                        className="place-thumb"
+                      <input
+                        ref={(el) => { photoInputs.current[r.id] = el }}
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={(e) => handlePhotoFile(r, e)}
                       />
+                      <div
+                        onClick={() => photoInputs.current[r.id]?.click()}
+                        title="Click to upload a photo"
+                        style={{ position: 'relative', cursor: 'pointer', width: 40, height: 40 }}
+                      >
+                        <img
+                          src={r.hosted_photo_url || r.photo_url || 'https://api.dicebear.com/7.x/shapes/svg?seed=' + r.id}
+                          alt=""
+                          className="place-thumb"
+                          style={{ opacity: uploadingPhotoId === r.id ? 0.4 : 1 }}
+                        />
+                        {uploadingPhotoId === r.id && (
+                          <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>
+                            …
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td>
                       {editingId === r.id ? (
@@ -209,6 +248,15 @@ export default function Import() {
                         placeholder="grilled, terrace…"
                         style={{ width: 160 }}
                       />
+                    </td>
+                    <td>
+                      {r.google_maps_url ? (
+                        <a href={r.google_maps_url} target="_blank" rel="noopener noreferrer" title="Open in Google Maps">
+                          📍
+                        </a>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
                     </td>
                     <td>
                       {r.google_rating ? `${Number(r.google_rating).toFixed(1)} ★ (${r.google_rating_count ?? '—'})` : <span className="muted">—</span>}
