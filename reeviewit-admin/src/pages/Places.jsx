@@ -86,7 +86,17 @@ export default function Places() {
                     </td>
                     <td>{p.category}</td>
                     <td style={{ maxWidth: 220 }}>{(p.keywords || []).join(', ') || <span className="muted">—</span>}</td>
-                    <td>{p.score ? `${Number(p.score).toFixed(1)} ★ (${p.reviewCount})` : <span className="muted">No reviews</span>}</td>
+                    <td>
+                      {p.score ? (
+                        `${Number(p.score).toFixed(1)} ★ (${p.reviewCount})`
+                      ) : p.google_rating ? (
+                        <span className="muted" title="From Google Maps — not yet a real Reeviewit rating">
+                          {Number(p.google_rating).toFixed(1)} ★ (Google)
+                        </span>
+                      ) : (
+                        <span className="muted">No reviews</span>
+                      )}
+                    </td>
                     <td>
                       <input
                         type="number"
