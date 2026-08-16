@@ -44,7 +44,7 @@ export default function Suggestions() {
       <div className="page-head">
         <div>
           <h1 style={{ fontSize: 24 }}>Place suggestions</h1>
-          <p>Requests from users who couldn't find a place in search. Approving here doesn't add the listing — add it yourself from Places using the details shown.</p>
+          <p>Requests from users who couldn't find a place in search, sent from the "Suggest a place" form on the site. Approving here doesn't add the listing — add it yourself from Places using the details (and photo, if there is one) shown below.</p>
         </div>
       </div>
 
@@ -66,7 +66,9 @@ export default function Suggestions() {
             <table>
               <thead>
                 <tr>
+                  <th>Photo</th>
                   <th>Name</th>
+                  <th>Category</th>
                   <th>Neighborhood</th>
                   <th>Address</th>
                   <th>Note</th>
@@ -79,7 +81,20 @@ export default function Suggestions() {
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id}>
+                    <td>
+                      {r.photo_url ? (
+                        <img
+                          src={r.photo_url}
+                          alt=""
+                          className="place-thumb"
+                          style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 8 }}
+                        />
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
                     <td>{r.name}</td>
+                    <td>{r.category || <span className="muted">—</span>}</td>
                     <td>{r.neighborhood || '—'}</td>
                     <td>{r.address || '—'}</td>
                     <td style={{ maxWidth: 220 }}>{r.note || <span className="muted">—</span>}</td>
