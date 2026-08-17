@@ -6,6 +6,7 @@ const LINKS = [
   { to: '/reviews', label: 'Reviews', icon: '★', requires: 'can_approve_reviews' },
   { to: '/products', label: 'Products', icon: '▣', requires: 'can_approve_reviews' },
   { to: '/places', label: 'Places', icon: '⚑', requires: 'can_manage_places' },
+  { to: '/keywords', label: 'Keywords', icon: '🔎', requires: 'can_manage_places' },
   { to: '/import', label: 'Import', icon: '⇪', requires: 'can_manage_places' },
   { to: '/suggestions', label: 'Suggestions', icon: '✎', requires: 'can_manage_places' },
   { to: '/category-images', label: 'Category images', icon: '🖼', requires: 'can_manage_places' },
