@@ -178,6 +178,33 @@ export async function uploadPlacePhoto(file) {
   return data.publicUrl
 }
 
+// ---------- Search keywords (live-site search synonyms, e.g. "burger" -> fast-food) ----------
+
+export async function fetchSearchKeywords() {
+  const { data, error } = await supabase
+    .from('search_keywords')
+    .select('id, keyword, category, created_at')
+    .order('category', { ascending: true })
+    .order('keyword', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function createSearchKeyword(keyword, category) {
+  const { data, error } = await supabase
+    .from('search_keywords')
+    .insert({ keyword: keyword.trim().toLowerCase(), category })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteSearchKeyword(id) {
+  const { error } = await supabase.from('search_keywords').delete().eq('id', id)
+  if (error) throw error
+}
+
 // ---------- Category images (homepage tiles: restaurant / cafeteria / etc.) ----------
 
 export async function fetchCategoryImages() {
