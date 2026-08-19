@@ -66,7 +66,7 @@ export async function deleteProductPost(postId) {
 // ---------- Places ----------
 
 const PLACE_COLUMNS =
-  'id, name, slug, category, neighborhood, address, lat, lng, price_range, cover_image_url, keywords, google_maps_url, featured_rank, created_at, google_rating, google_rating_count'
+  'id, name, slug, category, neighborhood, address, lat, lng, price_range, cover_image_url, keywords, google_maps_url, featured_rank, created_at, google_rating, google_rating_count, cta_enabled, cta_label, cta_url, menu_enabled, menu_items'
 
 // Best-effort: pull lat/lng out of a pasted Google Maps link when the URL
 // happens to contain them (e.g. ".../@35.6969,-0.6335,15z" or
@@ -105,10 +105,17 @@ export async function fetchPlaces({ q = '' } = {}) {
     .select('place_id, review_count, raw_score')
     .in('place_id', (data ?? []).map((p) => p.id).length ? (data ?? []).map((p) => p.id) : ['00000000-0000-0000-0000-000000000000'])
   const byPlace = Object.fromEntries((ratings ?? []).map((r) => [r.place_id, r]))
+
+  const { data: owners } = await supabase
+    .from('place_owners')
+    .select('place_id, profiles:user_id ( display_name )')
+  const ownerByPlace = Object.fromEntries((owners ?? []).map((o) => [o.place_id, o.profiles?.display_name]))
+
   return (data ?? []).map((p) => ({
     ...p,
     reviewCount: byPlace[p.id]?.review_count ?? 0,
     score: byPlace[p.id]?.raw_score ?? null,
+    ownerName: ownerByPlace[p.id] || null,
   }))
 }
 
@@ -126,6 +133,10 @@ export async function createPlace(place) {
     google_maps_url: place.google_maps_url || null,
     lat: coords?.lat ?? null,
     lng: coords?.lng ?? null,
+    cta_enabled: place.cta_enabled ?? false,
+    cta_label: place.cta_label || null,
+    cta_url: place.cta_url || null,
+    menu_enabled: place.menu_enabled ?? false,
   }
   const { data, error } = await supabase.from('places').insert(payload).select().single()
   if (error) throw error
@@ -146,6 +157,10 @@ export async function updatePlace(id, place) {
     google_maps_url: place.google_maps_url || null,
     lat: coords?.lat ?? null,
     lng: coords?.lng ?? null,
+    cta_enabled: place.cta_enabled ?? false,
+    cta_label: place.cta_label || null,
+    cta_url: place.cta_url || null,
+    menu_enabled: place.menu_enabled ?? false,
     updated_at: new Date().toISOString(),
   }
   const { error } = await supabase.from('places').update(payload).eq('id', id)
@@ -203,6 +218,76 @@ export async function createSearchKeyword(keyword, category) {
 export async function deleteSearchKeyword(id) {
   const { error } = await supabase.from('search_keywords').delete().eq('id', id)
   if (error) throw error
+}
+
+// ---------- Business claims ("Claim this business" leads from the live site) ----------
+
+export async function fetchBusinessClaims({ status = 'pending' } = {}) {
+  let query = supabase
+    .from('business_claims')
+    .select('id, place_id, first_name, last_name, phone, status, admin_notes, created_at, places:place_id ( name, slug )')
+    .order('created_at', { ascending: false })
+  if (status !== 'all') query = query.eq('status', status)
+  const { data, error } = await query
+  if (error) throw error
+  return data ?? []
+}
+
+export async function updateBusinessClaim(id, patch) {
+  const { error } = await supabase.from('business_claims').update(patch).eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteBusinessClaim(id) {
+  const { error } = await supabase.from('business_claims').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ---------- Business ownership (grants the scoped "Owner of {place}" badge) ----------
+
+export async function fetchPlaceOwners() {
+  const { data, error } = await supabase
+    .from('place_owners')
+    .select('id, place_id, user_id, granted_at, places:place_id ( name, slug ), profiles:user_id ( display_name, avatar_url )')
+    .order('granted_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function fetchOwnerForPlace(placeId) {
+  const { data, error } = await supabase
+    .from('place_owners')
+    .select('id, user_id, granted_at, profiles:user_id ( display_name, avatar_url )')
+    .eq('place_id', placeId)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+export async function grantPlaceOwnership(placeId, userId, grantedBy) {
+  const { error } = await supabase
+    .from('place_owners')
+    .upsert({ place_id: placeId, user_id: userId, granted_by: grantedBy }, { onConflict: 'place_id' })
+  if (error) throw error
+}
+
+export async function revokePlaceOwnership(placeId) {
+  const { error } = await supabase.from('place_owners').delete().eq('place_id', placeId)
+  if (error) throw error
+}
+
+// Small typeahead for "assign this place to..." — same table Users page
+// reads from, just narrowed to id/name/avatar for a picker list.
+export async function searchProfilesForOwnership(q) {
+  if (!q || q.trim().length < 2) return []
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, display_name, avatar_url')
+    .ilike('display_name', `%${q.trim()}%`)
+    .eq('is_staff', false)
+    .limit(8)
+  if (error) throw error
+  return data ?? []
 }
 
 // ---------- Category images (homepage tiles: restaurant / cafeteria / etc.) ----------
