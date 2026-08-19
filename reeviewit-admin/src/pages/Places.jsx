@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import AdminLayout from '../components/AdminLayout'
 import SearchInput from '../components/SearchInput'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -6,7 +7,8 @@ import PlaceFormModal from '../components/PlaceFormModal'
 import { fetchPlaces, deletePlace, setPlaceFeaturedRank } from '../lib/adminApi'
 
 export default function Places() {
-  const [q, setQ] = useState('')
+  const [searchParams] = useSearchParams()
+  const [q, setQ] = useState(searchParams.get('q') || '')
   const [places, setPlaces] = useState([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null) // null = closed, {} = new, place = edit
@@ -69,6 +71,7 @@ export default function Places() {
                   <th>Name</th>
                   <th>Category</th>
                   <th>Keywords</th>
+                  <th>Owner</th>
                   <th>Rating</th>
                   <th>Featured</th>
                   <th></th>
@@ -86,6 +89,13 @@ export default function Places() {
                     </td>
                     <td>{p.category}</td>
                     <td style={{ maxWidth: 220 }}>{(p.keywords || []).join(', ') || <span className="muted">—</span>}</td>
+                    <td>
+                      {p.ownerName ? (
+                        <span className="badge-pill badge-approved">{p.ownerName}</span>
+                      ) : (
+                        <span className="muted">Unclaimed</span>
+                      )}
+                    </td>
                     <td>
                       {p.score ? (
                         `${Number(p.score).toFixed(1)} ★ (${p.reviewCount})`
