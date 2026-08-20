@@ -84,13 +84,59 @@ export function extractLatLngFromMapsUrl(url) {
   return null
 }
 
+// Rough Arabic -> Latin transliteration so Arabic place names still produce
+// a readable, non-empty slug instead of being stripped down to nothing.
+const ARABIC_TRANSLIT = {
+  'ا': 'a', 'أ': 'a', 'إ': 'i', 'آ': 'a', 'ب': 'b', 'ت': 't', 'ث': 'th',
+  'ج': 'j', 'ح': 'h', 'خ': 'kh', 'د': 'd', 'ذ': 'dh', 'ر': 'r', 'ز': 'z',
+  'س': 's', 'ش': 'sh', 'ص': 's', 'ض': 'd', 'ط': 't', 'ظ': 'z', 'ع': 'a',
+  'غ': 'gh', 'ف': 'f', 'ق': 'q', 'ك': 'k', 'ل': 'l', 'م': 'm', 'ن': 'n',
+  'ه': 'h', 'و': 'w', 'ي': 'y', 'ى': 'a', 'ة': 'a', 'ء': '', 'ئ': 'e',
+  'ؤ': 'o', 'ال': 'al',
+}
+
+function transliterateArabic(str) {
+  return str.replace(/[\u0600-\u06FF]/g, (ch) => ARABIC_TRANSLIT[ch] ?? '')
+}
+
 function slugify(name) {
-  return name
+  let base = (name || '')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '')
+
+  if (/[\u0600-\u06FF]/.test(base)) {
+    base = transliterateArabic(base)
+  }
+
+  base = base.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+
+  // Name was entirely non-Latin/non-transliterable (emoji-only, numerals in
+  // another script, etc) — fall back to a short random slug rather than "".
+  if (!base) {
+    base = `place-${Math.random().toString(36).slice(2, 8)}`
+  }
+  return base
+}
+
+// Appends -2, -3, ... until we find a slug that isn't already taken.
+// `excludeId` lets updatePlace check uniqueness without colliding with itself.
+async function generateUniqueSlug(name, excludeId = null) {
+  const base = slugify(name)
+  let candidate = base
+  let attempt = 2
+  // Bounded loop — 50 attempts is far more than any real collision run.
+  for (let i = 0; i < 50; i++) {
+    let query = supabase.from('places').select('id').eq('slug', candidate)
+    if (excludeId) query = query.neq('id', excludeId)
+    const { data, error } = await query.maybeSingle()
+    if (error) throw error
+    if (!data) return candidate
+    candidate = `${base}-${attempt}`
+    attempt += 1
+  }
+  // Extremely unlikely fallback: guarantee uniqueness with a random suffix.
+  return `${base}-${Math.random().toString(36).slice(2, 6)}`
 }
 
 export async function fetchPlaces({ q = '' } = {}) {
@@ -123,7 +169,7 @@ export async function createPlace(place) {
   const coords = extractLatLngFromMapsUrl(place.google_maps_url)
   const payload = {
     name: place.name,
-    slug: place.slug?.trim() || slugify(place.name),
+    slug: place.slug?.trim() || (await generateUniqueSlug(place.name)),
     category: place.category || 'restaurant',
     neighborhood: place.neighborhood || null,
     address: place.address || null,
@@ -147,7 +193,7 @@ export async function updatePlace(id, place) {
   const coords = extractLatLngFromMapsUrl(place.google_maps_url)
   const payload = {
     name: place.name,
-    slug: place.slug?.trim() || slugify(place.name),
+    slug: place.slug?.trim() || (await generateUniqueSlug(place.name, id)),
     category: place.category || 'restaurant',
     neighborhood: place.neighborhood || null,
     address: place.address || null,
