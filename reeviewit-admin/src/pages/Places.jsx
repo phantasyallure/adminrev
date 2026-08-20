@@ -1,10 +1,37 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import * as XLSX from 'xlsx'
 import AdminLayout from '../components/AdminLayout'
 import SearchInput from '../components/SearchInput'
 import ConfirmDialog from '../components/ConfirmDialog'
 import PlaceFormModal from '../components/PlaceFormModal'
 import { fetchPlaces, deletePlace, setPlaceFeaturedRank } from '../lib/adminApi'
+
+// Same column shape as the bulk-import sheet, so an exported file can be
+// re-edited and re-imported without reshaping it.
+function exportPlacesToExcel(places) {
+  const rows = places.map((p) => ({
+    Name: p.name,
+    Category: p.category || '',
+    Neighborhood: p.neighborhood || '',
+    Address: p.address || '',
+    Keywords: (p.keywords || []).join(', '),
+    'Google Maps Link': p.google_maps_url || '',
+    'Google Rating': p.google_rating ?? '',
+    'Google Rating Count': p.google_rating_count ?? '',
+    'Photo URL': p.cover_image_url || '',
+    Slug: p.slug || '',
+    'Reeviewit Rating': p.score ?? '',
+    'Reeviewit Review Count': p.reviewCount ?? 0,
+    Owner: p.ownerName || '',
+    Featured: p.featured_rank ?? '',
+  }))
+  const sheet = XLSX.utils.json_to_sheet(rows)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, sheet, 'Places')
+  const date = new Date().toISOString().slice(0, 10)
+  XLSX.writeFile(wb, `reeviewit-places-${date}.xlsx`)
+}
 
 export default function Places() {
   const [searchParams] = useSearchParams()
@@ -53,6 +80,13 @@ export default function Places() {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <SearchInput value={q} onChange={setQ} placeholder="Search places…" />
+          <button
+            className="btn-ghost btn-small"
+            onClick={() => exportPlacesToExcel(places)}
+            disabled={loading || places.length === 0}
+          >
+            Export Excel
+          </button>
           <button className="btn-primary btn-small" onClick={() => setEditing({})}>+ Add place</button>
         </div>
       </div>
