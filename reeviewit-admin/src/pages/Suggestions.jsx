@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import AdminLayout from '../components/AdminLayout'
 import ConfirmDialog from '../components/ConfirmDialog'
+import { useAdminAuth } from '../context/AdminAuthContext'
 import { fetchPlaceSuggestions, setSuggestionStatus, deleteSuggestion } from '../lib/adminApi'
 
 const TABS = [
@@ -16,6 +17,7 @@ function formatDate(iso) {
 }
 
 export default function Suggestions() {
+  const { user } = useAdminAuth()
   const [status, setStatus] = useState('pending')
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
@@ -28,8 +30,8 @@ export default function Suggestions() {
 
   useEffect(load, [status]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const act = async (id, newStatus) => {
-    await setSuggestionStatus(id, newStatus)
+  const act = async (suggestion, newStatus) => {
+    await setSuggestionStatus(suggestion, newStatus, user.id)
     load()
   }
 
@@ -104,10 +106,10 @@ export default function Suggestions() {
                     <td>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {r.status === 'pending' && (
-                          <button className="btn-ghost btn-small" onClick={() => act(r.id, 'approved')}>Approve</button>
+                          <button className="btn-ghost btn-small" onClick={() => act(r, 'approved')}>Approve</button>
                         )}
                         {r.status === 'pending' && (
-                          <button className="btn-ghost btn-small" onClick={() => act(r.id, 'dismissed')}>Dismiss</button>
+                          <button className="btn-ghost btn-small" onClick={() => act(r, 'dismissed')}>Dismiss</button>
                         )}
                         <button className="btn-danger btn-small" onClick={() => setPendingDelete(r.id)}>Delete</button>
                       </div>
