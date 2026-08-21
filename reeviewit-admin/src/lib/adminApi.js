@@ -1,13 +1,36 @@
 import { supabase } from '../supabaseClient'
 import { compressImage } from './imageCompress'
 
+// ---------- Notifications ----------
+// Same `notifications` table the main site reads from — this app and the
+// main Rayyek site share one Supabase project. Never throws: a failed
+// notification should never block the approval action that triggered it.
+async function notifyUser({ userId, actorId, type, placeId, placeSlug, placeName, extraText, linkPath }) {
+  if (!userId) return
+  try {
+    const { error } = await supabase.from('notifications').insert({
+      user_id: userId,
+      actor_id: actorId ?? null,
+      type,
+      place_id: placeId ?? null,
+      place_slug: placeSlug ?? null,
+      place_name: placeName ?? null,
+      extra_text: extraText ?? null,
+      link_path: linkPath ?? null,
+    })
+    if (error) throw error
+  } catch (err) {
+    console.warn('[Reeviewit admin] notifyUser failed:', err.message)
+  }
+}
+
 // ---------- Reviews ----------
 
 export async function fetchReviews({ status = 'pending', q = '' } = {}) {
   let query = supabase
     .from('reviews')
     .select(
-      'id, body, rating_food, rating_service, rating_cleanliness, rating_price, rating_vibe, status, verification_level, created_at, place_id, author_id, places:place_id ( name ), profiles:author_id ( display_name )'
+      'id, body, rating_food, rating_service, rating_cleanliness, rating_price, rating_vibe, status, verification_level, created_at, place_id, author_id, places:place_id ( name, slug ), profiles:author_id ( display_name )'
     )
     .order('created_at', { ascending: false })
 
@@ -19,12 +42,27 @@ export async function fetchReviews({ status = 'pending', q = '' } = {}) {
   return data ?? []
 }
 
-export async function setReviewStatus(reviewId, status, moderatorId) {
+// `review` is the full row from fetchReviews (needs author_id + places for
+// the approval notification) rather than just an id.
+export async function setReviewStatus(review, status, moderatorId) {
+  const reviewId = review?.id ?? review
   const { error } = await supabase
     .from('reviews')
     .update({ status, moderated_by: moderatorId, moderated_at: new Date().toISOString() })
     .eq('id', reviewId)
   if (error) throw error
+
+  if (status === 'approved' && review?.author_id) {
+    notifyUser({
+      userId: review.author_id,
+      actorId: moderatorId,
+      type: 'review_approved',
+      placeId: review.place_id,
+      placeSlug: review.places?.slug,
+      placeName: review.places?.name,
+      linkPath: review.places?.slug ? `/lieux/${review.places.slug}` : null,
+    })
+  }
 }
 
 export async function deleteReview(reviewId) {
@@ -38,7 +76,7 @@ export async function fetchProductPosts({ status = 'pending', q = '' } = {}) {
   let query = supabase
     .from('product_posts')
     .select(
-      'id, image_url, caption, keywords, status, created_at, user_id, place_id, profiles:user_id ( display_name ), places:place_id ( name )'
+      'id, image_url, caption, keywords, status, created_at, user_id, place_id, profiles:user_id ( display_name ), places:place_id ( name, slug )'
     )
     .order('created_at', { ascending: false })
 
@@ -50,12 +88,27 @@ export async function fetchProductPosts({ status = 'pending', q = '' } = {}) {
   return data ?? []
 }
 
-export async function setProductPostStatus(postId, status, moderatorId) {
+// `post` is the full row from fetchProductPosts (needs user_id for the
+// approval notification) rather than just an id.
+export async function setProductPostStatus(post, status, moderatorId) {
+  const postId = post?.id ?? post
   const { error } = await supabase
     .from('product_posts')
     .update({ status, moderated_by: moderatorId, moderated_at: new Date().toISOString() })
     .eq('id', postId)
   if (error) throw error
+
+  if (status === 'approved' && post?.user_id) {
+    notifyUser({
+      userId: post.user_id,
+      actorId: moderatorId,
+      type: 'product_approved',
+      placeId: post.place_id,
+      placeSlug: post.places?.slug,
+      placeName: post.places?.name,
+      linkPath: '/products',
+    })
+  }
 }
 
 export async function deleteProductPost(postId) {
@@ -555,9 +608,22 @@ export async function fetchPlaceSuggestions({ status = 'pending' } = {}) {
   return data ?? []
 }
 
-export async function setSuggestionStatus(id, status) {
+// `suggestion` is the full row from fetchPlaceSuggestions (needs
+// submitted_by + name for the approval notification) rather than just an id.
+export async function setSuggestionStatus(suggestion, status, moderatorId) {
+  const id = suggestion?.id ?? suggestion
   const { error } = await supabase.from('place_suggestions').update({ status }).eq('id', id)
   if (error) throw error
+
+  if (status === 'approved' && suggestion?.submitted_by) {
+    notifyUser({
+      userId: suggestion.submitted_by,
+      actorId: moderatorId,
+      type: 'suggestion_approved',
+      extraText: suggestion.name,
+      linkPath: '/',
+    })
+  }
 }
 
 export async function deleteSuggestion(id) {
