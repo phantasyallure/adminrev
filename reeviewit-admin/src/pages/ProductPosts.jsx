@@ -31,8 +31,8 @@ export default function ProductPosts() {
     return () => clearTimeout(t)
   }, [q]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const act = async (id, newStatus) => {
-    await setProductPostStatus(id, newStatus, user.id)
+  const act = async (post, newStatus) => {
+    await setProductPostStatus(post, newStatus, user.id)
     load()
   }
 
@@ -99,10 +99,10 @@ export default function ProductPosts() {
                     <td>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {hasPermission('can_approve_reviews') && p.status !== 'approved' && (
-                          <button className="btn-ghost btn-small" onClick={() => act(p.id, 'approved')}>Approve</button>
+                          <button className="btn-ghost btn-small" onClick={() => act(p, 'approved')}>Approve</button>
                         )}
                         {hasPermission('can_approve_reviews') && p.status !== 'rejected' && (
-                          <button className="btn-ghost btn-small" onClick={() => act(p.id, 'rejected')}>Reject</button>
+                          <button className="btn-ghost btn-small" onClick={() => act(p, 'rejected')}>Reject</button>
                         )}
                         {hasPermission('can_delete_reviews') && (
                           <button className="btn-danger btn-small" onClick={() => setPendingDelete(p.id)}>Delete</button>
