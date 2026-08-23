@@ -40,6 +40,9 @@ export default function Places() {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null) // null = closed, {} = new, place = edit
   const [pendingDelete, setPendingDelete] = useState(null)
+  const [selected, setSelected] = useState(() => new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [pendingBulkDelete, setPendingBulkDelete] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -50,10 +53,41 @@ export default function Places() {
     const t = setTimeout(load, 250)
     return () => clearTimeout(t)
   }, [q]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setSelected(new Set()) }, [q])
+
+  const allSelected = places.length > 0 && selected.size === places.length
+  const someSelected = selected.size > 0 && !allSelected
+
+  const toggleSelectAll = () => {
+    setSelected(allSelected ? new Set() : new Set(places.map((p) => p.id)))
+  }
+  const toggleSelectOne = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const confirmDelete = async () => {
     await deletePlace(pendingDelete)
     setPendingDelete(null)
+    load()
+  }
+
+  const confirmBulkDelete = async () => {
+    setBulkBusy(true)
+    for (const id of selected) {
+      try {
+        await deletePlace(id)
+      } catch (err) {
+        console.error(err)
+      }
+    }
+    setBulkBusy(false)
+    setPendingBulkDelete(false)
+    setSelected(new Set())
     load()
   }
 
@@ -78,7 +112,21 @@ export default function Places() {
             Give a place a "Featured" number to put it in the homepage carousel (1 shows first). Leave it blank to keep it off the homepage.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {selected.size > 0 && (
+            <>
+              <span className="muted">{selected.size} selected</span>
+              <button
+                className="btn-ghost btn-small"
+                onClick={() => exportPlacesToExcel(places.filter((p) => selected.has(p.id)))}
+              >
+                Export selected
+              </button>
+              <button className="btn-danger btn-small" onClick={() => setPendingBulkDelete(true)} disabled={bulkBusy}>
+                Delete selected ({selected.size})
+              </button>
+            </>
+          )}
           <SearchInput value={q} onChange={setQ} placeholder="Search places…" />
           <button
             className="btn-ghost btn-small"
@@ -101,6 +149,14 @@ export default function Places() {
             <table>
               <thead>
                 <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={(el) => { if (el) el.indeterminate = someSelected }}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
                   <th></th>
                   <th>Name</th>
                   <th>Category</th>
@@ -114,6 +170,13 @@ export default function Places() {
               <tbody>
                 {places.map((p) => (
                   <tr key={p.id}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(p.id)}
+                        onChange={() => toggleSelectOne(p.id)}
+                      />
+                    </td>
                     <td>
                       <img src={p.cover_image_url || 'https://api.dicebear.com/7.x/shapes/svg?seed=' + p.id} alt="" className="place-thumb" />
                     </td>
@@ -181,6 +244,17 @@ export default function Places() {
           danger
           onConfirm={confirmDelete}
           onCancel={() => setPendingDelete(null)}
+        />
+      )}
+
+      {pendingBulkDelete && (
+        <ConfirmDialog
+          title={`Delete ${selected.size} place${selected.size === 1 ? '' : 's'}?`}
+          message="This removes these listings and their reviews from Reeviewit."
+          confirmLabel="Delete"
+          danger
+          onConfirm={confirmBulkDelete}
+          onCancel={() => setPendingBulkDelete(false)}
         />
       )}
     </AdminLayout>
