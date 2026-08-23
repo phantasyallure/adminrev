@@ -27,6 +27,9 @@ export default function Import() {
   const [pendingDelete, setPendingDelete] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [uploadingPhotoId, setUploadingPhotoId] = useState(null)
+  const [selected, setSelected] = useState(() => new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [pendingBulkDelete, setPendingBulkDelete] = useState(false)
   const fileInput = useRef(null)
   const photoInputs = useRef({})
 
@@ -35,6 +38,22 @@ export default function Import() {
     fetchPlaceImports({ status }).then(setRows).catch(console.error).finally(() => setLoading(false))
   }
   useEffect(load, [status]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setSelected(new Set()) }, [status])
+
+  const allSelected = rows.length > 0 && selected.size === rows.length
+  const someSelected = selected.size > 0 && !allSelected
+
+  const toggleSelectAll = () => {
+    setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))
+  }
+  const toggleSelectOne = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const handleFile = async (e) => {
     const file = e.target.files?.[0]
@@ -107,6 +126,36 @@ export default function Import() {
     load()
   }
 
+  const handlePublishSelected = async () => {
+    setBulkBusy(true)
+    const targets = rows.filter((r) => selected.has(r.id) && r.status === 'pending')
+    for (const row of targets) {
+      try {
+        await publishPlaceImport(row, session?.access_token)
+      } catch {
+        // keep going — failed rows stay pending with an error message attached
+      }
+    }
+    setBulkBusy(false)
+    setSelected(new Set())
+    load()
+  }
+
+  const confirmBulkDelete = async () => {
+    setBulkBusy(true)
+    for (const id of selected) {
+      try {
+        await deletePlaceImport(id)
+      } catch (err) {
+        console.error(err)
+      }
+    }
+    setBulkBusy(false)
+    setPendingBulkDelete(false)
+    setSelected(new Set())
+    load()
+  }
+
   const handlePhotoFile = async (row, e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -157,11 +206,26 @@ export default function Import() {
             </button>
           ))}
         </div>
-        {status === 'pending' && pendingCount > 0 && (
-          <button className="btn-primary btn-small" onClick={handlePublishAll} disabled={publishingAll}>
-            {publishingAll ? 'Publishing…' : `Publish all pending (${pendingCount})`}
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {selected.size > 0 && (
+            <>
+              <span className="muted">{selected.size} selected</span>
+              {status === 'pending' && (
+                <button className="btn-primary btn-small" onClick={handlePublishSelected} disabled={bulkBusy}>
+                  {bulkBusy ? 'Publishing…' : `Publish selected (${selected.size})`}
+                </button>
+              )}
+              <button className="btn-danger btn-small" onClick={() => setPendingBulkDelete(true)} disabled={bulkBusy}>
+                Delete selected ({selected.size})
+              </button>
+            </>
+          )}
+          {status === 'pending' && pendingCount > 0 && (
+            <button className="btn-primary btn-small" onClick={handlePublishAll} disabled={publishingAll}>
+              {publishingAll ? 'Publishing…' : `Publish all pending (${pendingCount})`}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="card">
@@ -176,6 +240,14 @@ export default function Import() {
             <table>
               <thead>
                 <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={(el) => { if (el) el.indeterminate = someSelected }}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
                   <th></th>
                   <th>Name</th>
                   <th>Category</th>
@@ -189,6 +261,13 @@ export default function Import() {
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(r.id)}
+                        onChange={() => toggleSelectOne(r.id)}
+                      />
+                    </td>
                     <td>
                       <input
                         ref={(el) => { photoInputs.current[r.id] = el }}
@@ -294,6 +373,17 @@ export default function Import() {
           danger
           onConfirm={confirmDelete}
           onCancel={() => setPendingDelete(null)}
+        />
+      )}
+
+      {pendingBulkDelete && (
+        <ConfirmDialog
+          title={`Delete ${selected.size} staged row${selected.size === 1 ? '' : 's'}?`}
+          message="This only removes them from the import queue — nothing published from them is affected."
+          confirmLabel="Delete"
+          danger
+          onConfirm={confirmBulkDelete}
+          onCancel={() => setPendingBulkDelete(false)}
         />
       )}
     </AdminLayout>
