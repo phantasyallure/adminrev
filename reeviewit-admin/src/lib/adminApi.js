@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient'
 import { compressImage } from './imageCompress'
+import { geocodeAddress } from './geo'
 
 // ---------- Notifications ----------
 // Same `notifications` table the main site reads from — this app and the
@@ -134,7 +135,28 @@ export function extractLatLngFromMapsUrl(url) {
   if (dMatch) return { lat: parseFloat(dMatch[1]), lng: parseFloat(dMatch[2]) }
   const qMatch = url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/)
   if (qMatch) return { lat: parseFloat(qMatch[1]), lng: parseFloat(qMatch[2]) }
+  const llMatch = url.match(/[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/)
+  if (llMatch) return { lat: parseFloat(llMatch[1]), lng: parseFloat(llMatch[2]) }
+  // Bare "lat,lng" pair anywhere in the URL — last resort, but harmless
+  // since it's scoped to two decimal numbers separated by a comma.
+  const bareMatch = url.match(/(-?\d{1,3}\.\d{3,}),\s*(-?\d{1,3}\.\d{3,})/)
+  if (bareMatch) return { lat: parseFloat(bareMatch[1]), lng: parseFloat(bareMatch[2]) }
   return null
+}
+
+// Google Maps links only carry embedded coordinates when they're the long
+// "full" form. The short links Google hands out from the mobile app's
+// "Share" button (maps.app.goo.gl/…, goo.gl/maps/…) redirect to the real
+// place but a browser can't follow that redirect cross-origin to read it —
+// so extractLatLngFromMapsUrl comes back null for those, and always did.
+// Fall back to geocoding the typed address/neighborhood/name instead of
+// leaving lat/lng empty, since a place with no coordinates never shows up
+// under "Près de moi" on the live site no matter how many reviews it gets.
+async function resolveCoords({ google_maps_url, address, neighborhood, name }) {
+  const fromUrl = extractLatLngFromMapsUrl(google_maps_url)
+  if (fromUrl) return fromUrl
+  const fallbackAddress = address || [name, neighborhood].filter(Boolean).join(', ')
+  return geocodeAddress(fallbackAddress)
 }
 
 // Rough Arabic -> Latin transliteration so Arabic place names still produce
@@ -219,7 +241,7 @@ export async function fetchPlaces({ q = '' } = {}) {
 }
 
 export async function createPlace(place) {
-  const coords = extractLatLngFromMapsUrl(place.google_maps_url)
+  const coords = await resolveCoords(place)
   const payload = {
     name: place.name,
     slug: place.slug?.trim() || (await generateUniqueSlug(place.name)),
@@ -243,7 +265,7 @@ export async function createPlace(place) {
 }
 
 export async function updatePlace(id, place) {
-  const coords = extractLatLngFromMapsUrl(place.google_maps_url)
+  const coords = await resolveCoords(place)
   const payload = {
     name: place.name,
     slug: place.slug?.trim() || (await generateUniqueSlug(place.name, id)),
@@ -269,6 +291,32 @@ export async function updatePlace(id, place) {
 export async function deletePlace(id) {
   const { error } = await supabase.from('places').delete().eq('id', id)
   if (error) throw error
+}
+
+// One-time repair for places that were saved before the geocoding fallback
+// existed (or from a short Google Maps share link) and so sit in the
+// database with lat = null / lng = null — meaning they're invisible to
+// "Près de moi" on the live site even though they're fully published.
+// Re-resolves coordinates for each from its saved Google Maps link,
+// falling back to its address/neighborhood, and writes them back.
+export async function backfillMissingCoordinates() {
+  const { data, error } = await supabase
+    .from('places')
+    .select('id, name, neighborhood, address, google_maps_url')
+    .or('lat.is.null,lng.is.null')
+  if (error) throw error
+
+  const results = { fixed: 0, stillMissing: 0, total: data?.length ?? 0 }
+  for (const p of data ?? []) {
+    const coords = await resolveCoords(p)
+    if (coords) {
+      await supabase.from('places').update({ lat: coords.lat, lng: coords.lng }).eq('id', p.id)
+      results.fixed += 1
+    } else {
+      results.stillMissing += 1
+    }
+  }
+  return results
 }
 
 // Sets/clears a place's spot in the homepage carousel. Pass null to remove
