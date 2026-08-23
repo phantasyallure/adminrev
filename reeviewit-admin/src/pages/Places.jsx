@@ -5,7 +5,7 @@ import AdminLayout from '../components/AdminLayout'
 import SearchInput from '../components/SearchInput'
 import ConfirmDialog from '../components/ConfirmDialog'
 import PlaceFormModal from '../components/PlaceFormModal'
-import { fetchPlaces, deletePlace, setPlaceFeaturedRank } from '../lib/adminApi'
+import { fetchPlaces, deletePlace, setPlaceFeaturedRank, backfillMissingCoordinates } from '../lib/adminApi'
 
 // Same column shape as the bulk-import sheet, so an exported file can be
 // re-edited and re-imported without reshaping it.
@@ -43,6 +43,8 @@ export default function Places() {
   const [selected, setSelected] = useState(() => new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false)
+  const [fixingCoords, setFixingCoords] = useState(false)
+  const [coordsResult, setCoordsResult] = useState(null)
 
   const load = () => {
     setLoading(true)
@@ -91,6 +93,21 @@ export default function Places() {
     load()
   }
 
+  const handleFixCoords = async () => {
+    setFixingCoords(true)
+    setCoordsResult(null)
+    try {
+      const res = await backfillMissingCoordinates()
+      setCoordsResult(res)
+      load()
+    } catch (err) {
+      console.error(err)
+      setCoordsResult({ error: err.message || 'Failed to fix locations.' })
+    } finally {
+      setFixingCoords(false)
+    }
+  }
+
   const handleFeaturedChange = async (place, value) => {
     const rank = value === '' ? null : Number(value)
     setPlaces((prev) => prev.map((p) => (p.id === place.id ? { ...p, featured_rank: rank } : p)))
@@ -127,6 +144,14 @@ export default function Places() {
               </button>
             </>
           )}
+          <button
+            className="btn-ghost btn-small"
+            onClick={handleFixCoords}
+            disabled={fixingCoords}
+            title="Re-checks every place with a missing location and fills it in from its Google Maps link or address, so it can show up under 'Près de moi'."
+          >
+            {fixingCoords ? 'Fixing locations…' : 'Fix missing locations'}
+          </button>
           <SearchInput value={q} onChange={setQ} placeholder="Search places…" />
           <button
             className="btn-ghost btn-small"
@@ -138,6 +163,16 @@ export default function Places() {
           <button className="btn-primary btn-small" onClick={() => setEditing({})}>+ Add place</button>
         </div>
       </div>
+
+      {coordsResult && (
+        <p className={coordsResult.error ? 'error-text' : 'muted'} style={{ marginBottom: 12 }}>
+          {coordsResult.error
+            ? coordsResult.error
+            : coordsResult.total === 0
+              ? 'Every place already has a location — nothing to fix.'
+              : `Checked ${coordsResult.total} place(s) missing a location — fixed ${coordsResult.fixed}${coordsResult.stillMissing ? `, ${coordsResult.stillMissing} still couldn't be resolved (check their address)` : ''}.`}
+        </p>
+      )}
 
       <div className="card">
         {loading ? (
