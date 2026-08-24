@@ -6,6 +6,7 @@ import SearchInput from '../components/SearchInput'
 import ConfirmDialog from '../components/ConfirmDialog'
 import PlaceFormModal from '../components/PlaceFormModal'
 import { fetchPlaces, deletePlace, setPlaceFeaturedRank, backfillMissingCoordinates } from '../lib/adminApi'
+import { useAdminAuth } from '../context/AdminAuthContext'
 
 // Same column shape as the bulk-import sheet, so an exported file can be
 // re-edited and re-imported without reshaping it.
@@ -34,6 +35,7 @@ function exportPlacesToExcel(places) {
 }
 
 export default function Places() {
+  const { session } = useAdminAuth()
   const [searchParams] = useSearchParams()
   const [q, setQ] = useState(searchParams.get('q') || '')
   const [places, setPlaces] = useState([])
@@ -99,7 +101,7 @@ export default function Places() {
     setCoordsResult(null)
     setCoordsProgress(null)
     try {
-      const res = await backfillMissingCoordinates(({ done, total }) => setCoordsProgress({ done, total }))
+      const res = await backfillMissingCoordinates(session?.access_token, ({ done, total }) => setCoordsProgress({ done, total }))
       setCoordsResult(res)
       load()
     } catch (err) {
