@@ -1,6 +1,5 @@
 import { supabase } from '../supabaseClient'
 import { compressImage } from './imageCompress'
-import { geocodeAddress } from './geo'
 
 // ---------- Notifications ----------
 // Same `notifications` table the main site reads from — this app and the
@@ -152,11 +151,30 @@ export function extractLatLngFromMapsUrl(url) {
 // Fall back to geocoding the typed address/neighborhood/name instead of
 // leaving lat/lng empty, since a place with no coordinates never shows up
 // under "Près de moi" on the live site no matter how many reviews it gets.
-async function resolveCoords({ google_maps_url, address, neighborhood, name }) {
+//
+// The geocode lookup itself runs server-side (see the geocode-place edge
+// function) rather than calling Nominatim directly from the browser —
+// Nominatim's usage policy requires an identifying User-Agent and blocks
+// bulk/automated querying from one client, which a browser-based fetch
+// reliably tripped once there were more than a handful of places to fix.
+async function resolveCoords({ google_maps_url, address, neighborhood, name }, accessToken) {
   const fromUrl = extractLatLngFromMapsUrl(google_maps_url)
   if (fromUrl) return fromUrl
   const fallbackAddress = address || [name, neighborhood].filter(Boolean).join(', ')
-  return geocodeAddress(fallbackAddress)
+  if (!fallbackAddress.trim() || !accessToken) return null
+  try {
+    const res = await fetch(functionUrl('geocode-place'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ address: fallbackAddress }),
+    })
+    if (!res.ok) return null
+    const { lat, lng } = await res.json()
+    if (lat == null || lng == null) return null
+    return { lat, lng }
+  } catch {
+    return null
+  }
 }
 
 // Rough Arabic -> Latin transliteration so Arabic place names still produce
@@ -240,8 +258,8 @@ export async function fetchPlaces({ q = '' } = {}) {
   }))
 }
 
-export async function createPlace(place) {
-  const coords = await resolveCoords(place)
+export async function createPlace(place, accessToken) {
+  const coords = await resolveCoords(place, accessToken)
   const payload = {
     name: place.name,
     slug: place.slug?.trim() || (await generateUniqueSlug(place.name)),
@@ -264,8 +282,8 @@ export async function createPlace(place) {
   return data
 }
 
-export async function updatePlace(id, place) {
-  const coords = await resolveCoords(place)
+export async function updatePlace(id, place, accessToken) {
+  const coords = await resolveCoords(place, accessToken)
   const payload = {
     name: place.name,
     slug: place.slug?.trim() || (await generateUniqueSlug(place.name, id)),
@@ -299,7 +317,7 @@ export async function deletePlace(id) {
 // "Près de moi" on the live site even though they're fully published.
 // Re-resolves coordinates for each from its saved Google Maps link,
 // falling back to its address/neighborhood, and writes them back.
-export async function backfillMissingCoordinates(onProgress) {
+export async function backfillMissingCoordinates(accessToken, onProgress) {
   const { data, error } = await supabase
     .from('places')
     .select('id, name, neighborhood, address, google_maps_url')
@@ -312,11 +330,11 @@ export async function backfillMissingCoordinates(onProgress) {
     const fromUrl = extractLatLngFromMapsUrl(p.google_maps_url)
     let coords = fromUrl
     if (!coords) {
-      // Only the geocoding fallback hits the network (Nominatim, rate-limited
-      // to ~1 request/second per its usage policy) — a short pause here
-      // avoids silently-failed lookups when there are many rows in a row.
+      // Only the geocoding fallback hits the network (via the geocode-place
+      // edge function, itself rate-limited by Nominatim's usage policy) — a
+      // short pause here avoids hammering it when there are many rows.
       await new Promise((r) => setTimeout(r, 1100))
-      coords = await resolveCoords(p)
+      coords = await resolveCoords(p, accessToken)
     }
     if (coords) {
       await supabase.from('places').update({ lat: coords.lat, lng: coords.lng }).eq('id', p.id)
@@ -815,7 +833,7 @@ export async function publishPlaceImport(row, accessToken) {
       keywords: row.keywords,
       google_maps_url: row.google_maps_url,
       cover_image_url: coverImageUrl,
-    })
+    }, accessToken)
 
     if (row.google_rating != null || row.google_rating_count != null) {
       await supabase
