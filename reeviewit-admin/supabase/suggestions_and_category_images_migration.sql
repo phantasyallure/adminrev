@@ -15,6 +15,8 @@ create table if not exists public.place_suggestions (
   category text,
   neighborhood text,
   address text,
+  lat double precision,
+  lng double precision,
   note text,
   submitted_by uuid references public.profiles(id) on delete set null,
   status text not null default 'pending' check (status in ('pending', 'approved', 'dismissed')),
@@ -25,7 +27,9 @@ create table if not exists public.place_suggestions (
 -- without these columns, since the admin UI didn't display them before.
 alter table public.place_suggestions
   add column if not exists category text,
-  add column if not exists photo_url text;
+  add column if not exists photo_url text,
+  add column if not exists lat double precision,
+  add column if not exists lng double precision;
 
 alter table public.place_suggestions enable row level security;
 
@@ -118,3 +122,58 @@ drop policy if exists "content managers can update category tile photos" on stor
 create policy "content managers can update category tile photos"
   on storage.objects for update
   using (bucket_id = 'category-images' and public.has_admin_permission('can_manage_places'));
+
+-- ============================================================
+-- 3. Place photo submissions — the "Add a real photo" button shown on
+--    cards that are currently using the category placeholder photo
+--    (i.e. the place has no cover_image_url of its own yet). Mirrors
+--    place_suggestions: goes to Admin for review, nothing replaces the
+--    live cover photo automatically.
+-- ============================================================
+create table if not exists public.place_photo_submissions (
+  id uuid primary key default uuid_generate_v4(),
+  place_id uuid not null references public.places(id) on delete cascade,
+  photo_url text not null,
+  submitted_by uuid references public.profiles(id) on delete set null,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'dismissed')),
+  created_at timestamptz not null default now()
+);
+
+alter table public.place_photo_submissions enable row level security;
+
+drop policy if exists "users can submit place photos" on public.place_photo_submissions;
+create policy "users can submit place photos"
+  on public.place_photo_submissions for insert
+  with check (auth.uid() = submitted_by);
+
+drop policy if exists "users can view their own photo submissions" on public.place_photo_submissions;
+create policy "users can view their own photo submissions"
+  on public.place_photo_submissions for select
+  using (auth.uid() = submitted_by or public.has_admin_permission('can_manage_places'));
+
+drop policy if exists "content managers can update photo submissions" on public.place_photo_submissions;
+create policy "content managers can update photo submissions"
+  on public.place_photo_submissions for update
+  using (public.has_admin_permission('can_manage_places'));
+
+drop policy if exists "content managers can delete photo submissions" on public.place_photo_submissions;
+create policy "content managers can delete photo submissions"
+  on public.place_photo_submissions for delete
+  using (public.has_admin_permission('can_manage_places'));
+
+-- Storage bucket for submitted photos. Public read (so the admin panel can
+-- preview them before approving), upload restricted to a user's own
+-- folder — same convention as place-suggestions and review-photos.
+insert into storage.buckets (id, name, public)
+values ('place-photo-submissions', 'place-photo-submissions', true)
+on conflict (id) do nothing;
+
+drop policy if exists "submitted place photos are publicly readable" on storage.objects;
+create policy "submitted place photos are publicly readable"
+  on storage.objects for select
+  using (bucket_id = 'place-photo-submissions');
+
+drop policy if exists "users can upload their own place photo submissions" on storage.objects;
+create policy "users can upload their own place photo submissions"
+  on storage.objects for insert
+  with check (bucket_id = 'place-photo-submissions' and auth.uid()::text = (storage.foldername(name))[1]);
