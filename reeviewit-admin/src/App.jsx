@@ -10,6 +10,7 @@ import Keywords from './pages/Keywords'
 import BusinessClaims from './pages/BusinessClaims'
 import Import from './pages/Import'
 import Suggestions from './pages/Suggestions'
+import PlacePhotos from './pages/PlacePhotos'
 import CategoryImages from './pages/CategoryImages'
 import Users from './pages/Users'
 import Badges from './pages/Badges'
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/business-claims" element={<ProtectedRoute requires="can_manage_places"><BusinessClaims /></ProtectedRoute>} />
         <Route path="/import" element={<ProtectedRoute requires="can_manage_places"><Import /></ProtectedRoute>} />
         <Route path="/suggestions" element={<ProtectedRoute requires="can_manage_places"><Suggestions /></ProtectedRoute>} />
+        <Route path="/place-photos" element={<ProtectedRoute requires="can_manage_places"><PlacePhotos /></ProtectedRoute>} />
         <Route path="/category-images" element={<ProtectedRoute requires="can_manage_places"><CategoryImages /></ProtectedRoute>} />
         <Route path="/users" element={<ProtectedRoute requires="can_ban_users"><Users /></ProtectedRoute>} />
         <Route path="/badges" element={<ProtectedRoute requires="can_award_badges"><Badges /></ProtectedRoute>} />
