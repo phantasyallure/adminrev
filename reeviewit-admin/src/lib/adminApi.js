@@ -299,7 +299,7 @@ export async function deletePlace(id) {
 // "Près de moi" on the live site even though they're fully published.
 // Re-resolves coordinates for each from its saved Google Maps link,
 // falling back to its address/neighborhood, and writes them back.
-export async function backfillMissingCoordinates() {
+export async function backfillMissingCoordinates(onProgress) {
   const { data, error } = await supabase
     .from('places')
     .select('id, name, neighborhood, address, google_maps_url')
@@ -307,14 +307,25 @@ export async function backfillMissingCoordinates() {
   if (error) throw error
 
   const results = { fixed: 0, stillMissing: 0, total: data?.length ?? 0 }
+  let done = 0
   for (const p of data ?? []) {
-    const coords = await resolveCoords(p)
+    const fromUrl = extractLatLngFromMapsUrl(p.google_maps_url)
+    let coords = fromUrl
+    if (!coords) {
+      // Only the geocoding fallback hits the network (Nominatim, rate-limited
+      // to ~1 request/second per its usage policy) — a short pause here
+      // avoids silently-failed lookups when there are many rows in a row.
+      await new Promise((r) => setTimeout(r, 1100))
+      coords = await resolveCoords(p)
+    }
     if (coords) {
       await supabase.from('places').update({ lat: coords.lat, lng: coords.lng }).eq('id', p.id)
       results.fixed += 1
     } else {
       results.stillMissing += 1
     }
+    done += 1
+    onProgress?.({ done, total: results.total })
   }
   return results
 }
