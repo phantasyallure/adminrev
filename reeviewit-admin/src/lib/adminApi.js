@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient'
 import { compressImage } from './imageCompress'
+import { decodePlusCodeFromText } from './plusCode'
 
 // ---------- Notifications ----------
 // Same `notifications` table the main site reads from — this app and the
@@ -160,6 +161,17 @@ export function extractLatLngFromMapsUrl(url) {
 async function resolveCoords({ google_maps_url, address, neighborhood, name }, accessToken) {
   const fromUrl = extractLatLngFromMapsUrl(google_maps_url)
   if (fromUrl) return fromUrl
+
+  // Most scraped addresses are a Google Plus Code ("M83X+6WG, Unnamed
+  // Road, Es Sénia, Algeria") rather than a real street address — that's
+  // the #1 reason imported places end up with no coordinates at all.
+  // Nominatim (the geocoder below) can't resolve a Plus Code as if it
+  // were an address and just fails silently. Plus Codes decode to exact
+  // coordinates with pure math, no network call needed, so try that
+  // first — it's both more reliable and instant for this data.
+  const fromPlusCode = decodePlusCodeFromText(address)
+  if (fromPlusCode) return fromPlusCode
+
   const fallbackAddress = address || [name, neighborhood].filter(Boolean).join(', ')
   if (!fallbackAddress.trim() || !accessToken) return null
   try {
