@@ -10,6 +10,7 @@ const LINKS = [
   { to: '/business-claims', label: 'Business claims', icon: '🏷️', requires: 'can_manage_places' },
   { to: '/import', label: 'Import', icon: '⇪', requires: 'can_manage_places' },
   { to: '/suggestions', label: 'Suggestions', icon: '✎', requires: 'can_manage_places' },
+  { to: '/place-photos', label: 'Place photos', icon: '📷', requires: 'can_manage_places' },
   { to: '/category-images', label: 'Category images', icon: '🖼', requires: 'can_manage_places' },
   { to: '/users', label: 'Users', icon: '◎', requires: 'can_ban_users' },
   { to: '/badges', label: 'Badges', icon: '⬥', requires: 'can_award_badges' },
