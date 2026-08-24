@@ -19,7 +19,7 @@ const CTA_LABELS = [
 
 export default function PlaceFormModal({ place, onClose, onSaved }) {
   const isEdit = Boolean(place)
-  const { user: adminUser } = useAdminAuth()
+  const { user: adminUser, session } = useAdminAuth()
   const [form, setForm] = useState({
     name: place?.name || '',
     slug: place?.slug || '',
@@ -122,9 +122,9 @@ export default function PlaceFormModal({ place, onClose, onSaved }) {
         keywords: form.keywords.split(',').map((k) => k.trim()).filter(Boolean),
       }
       if (isEdit) {
-        await updatePlace(place.id, payload)
+        await updatePlace(place.id, payload, session?.access_token)
       } else {
-        await createPlace(payload)
+        await createPlace(payload, session?.access_token)
       }
       onSaved()
     } catch (err) {
