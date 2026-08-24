@@ -708,6 +708,58 @@ export async function deleteSuggestion(id) {
   if (error) throw error
 }
 
+// ---------- Place photo submissions ("Add a real photo" button on the
+// site, shown on cards currently using the category placeholder photo) ----------
+
+export async function fetchPlacePhotoSubmissions({ status = 'pending' } = {}) {
+  let query = supabase
+    .from('place_photo_submissions')
+    .select('*, places:place_id ( name, slug, cover_image_url ), profiles:submitted_by ( display_name )')
+    .order('created_at', { ascending: false })
+  if (status !== 'all') query = query.eq('status', status)
+  const { data, error } = await query
+  if (error) throw error
+  return data ?? []
+}
+
+// `submission` is the full row from fetchPlacePhotoSubmissions (needs
+// place_id/places/submitted_by), not just an id.
+//
+// Approving does two things: sets this photo as the place's live cover
+// photo (so it actually replaces the category placeholder on the site),
+// and marks the submission approved. Dismissing only marks it dismissed —
+// the place keeps showing its current cover photo (or the placeholder).
+export async function setPhotoSubmissionStatus(submission, status, moderatorId) {
+  const id = submission?.id ?? submission
+  const { error } = await supabase.from('place_photo_submissions').update({ status }).eq('id', id)
+  if (error) throw error
+
+  if (status === 'approved' && submission?.place_id) {
+    const { error: placeError } = await supabase
+      .from('places')
+      .update({ cover_image_url: submission.photo_url, updated_at: new Date().toISOString() })
+      .eq('id', submission.place_id)
+    if (placeError) throw placeError
+
+    if (submission?.submitted_by) {
+      notifyUser({
+        userId: submission.submitted_by,
+        actorId: moderatorId,
+        type: 'photo_approved',
+        placeId: submission.place_id,
+        placeSlug: submission.places?.slug,
+        placeName: submission.places?.name,
+        linkPath: submission.places?.slug ? `/lieux/${submission.places.slug}` : '/',
+      })
+    }
+  }
+}
+
+export async function deletePhotoSubmission(id) {
+  const { error } = await supabase.from('place_photo_submissions').delete().eq('id', id)
+  if (error) throw error
+}
+
 // ---------- Bulk place import (Google Maps scrape → Excel → review → publish) ----------
 
 // Expected Excel headers (case/space-insensitive): Name, Category,
