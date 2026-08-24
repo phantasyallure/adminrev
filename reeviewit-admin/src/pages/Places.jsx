@@ -44,6 +44,7 @@ export default function Places() {
   const [bulkBusy, setBulkBusy] = useState(false)
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false)
   const [fixingCoords, setFixingCoords] = useState(false)
+  const [coordsProgress, setCoordsProgress] = useState(null)
   const [coordsResult, setCoordsResult] = useState(null)
 
   const load = () => {
@@ -96,8 +97,9 @@ export default function Places() {
   const handleFixCoords = async () => {
     setFixingCoords(true)
     setCoordsResult(null)
+    setCoordsProgress(null)
     try {
-      const res = await backfillMissingCoordinates()
+      const res = await backfillMissingCoordinates(({ done, total }) => setCoordsProgress({ done, total }))
       setCoordsResult(res)
       load()
     } catch (err) {
@@ -105,6 +107,7 @@ export default function Places() {
       setCoordsResult({ error: err.message || 'Failed to fix locations.' })
     } finally {
       setFixingCoords(false)
+      setCoordsProgress(null)
     }
   }
 
@@ -150,7 +153,11 @@ export default function Places() {
             disabled={fixingCoords}
             title="Re-checks every place with a missing location and fills it in from its Google Maps link or address, so it can show up under 'Près de moi'."
           >
-            {fixingCoords ? 'Fixing locations…' : 'Fix missing locations'}
+            {fixingCoords
+              ? coordsProgress
+                ? `Fixing locations… (${coordsProgress.done}/${coordsProgress.total})`
+                : 'Checking places…'
+              : 'Fix missing locations'}
           </button>
           <SearchInput value={q} onChange={setQ} placeholder="Search places…" />
           <button
