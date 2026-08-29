@@ -521,14 +521,21 @@ export function functionUrl(name) {
 // ---------- Users ----------
 
 export async function fetchUsers({ q = '' } = {}) {
+  // is_banned / banned_reason / is_deleted / is_staff now live in
+  // user_moderation (admin-only RLS) instead of the publicly-readable
+  // profiles table — see security_hardening_migration.sql.
   let query = supabase
     .from('profiles')
-    .select('id, display_name, avatar_url, is_banned, banned_reason, is_deleted, is_staff, created_at')
-    .eq('is_staff', false)
+    .select('id, display_name, avatar_url, created_at')
     .order('created_at', { ascending: false })
   if (q) query = query.ilike('display_name', `%${q}%`)
   const { data, error } = await query
   if (error) throw error
+
+  const { data: moderation } = await supabase
+    .from('user_moderation')
+    .select('user_id, is_banned, banned_reason, is_deleted, is_staff')
+  const modByUser = Object.fromEntries((moderation ?? []).map((m) => [m.user_id, m]))
 
   const { data: counts } = await supabase.from('user_review_counts').select('user_id, review_count')
   const byUser = Object.fromEntries((counts ?? []).map((c) => [c.user_id, c.review_count]))
@@ -541,25 +548,55 @@ export async function fetchUsers({ q = '' } = {}) {
   }
 
   return (data ?? [])
-    .filter((u) => !u.is_deleted)
-    .map((u) => ({ ...u, reviewCount: byUser[u.id] ?? 0, badges: badgesByUser[u.id] ?? [] }))
+    .map((u) => ({
+      ...u,
+      is_banned: modByUser[u.id]?.is_banned ?? false,
+      banned_reason: modByUser[u.id]?.banned_reason ?? null,
+      is_deleted: modByUser[u.id]?.is_deleted ?? false,
+      is_staff: modByUser[u.id]?.is_staff ?? false,
+      reviewCount: byUser[u.id] ?? 0,
+      badges: badgesByUser[u.id] ?? [],
+    }))
+    .filter((u) => !u.is_deleted && !u.is_staff)
 }
 
 export async function setUserBanned(userId, isBanned, reason) {
-  const { error } = await supabase
-    .from('profiles')
-    .update({ is_banned: isBanned, banned_reason: isBanned ? reason || null : null, banned_at: isBanned ? new Date().toISOString() : null })
-    .eq('id', userId)
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const { error } = await supabase.from('user_moderation').upsert(
+    {
+      user_id: userId,
+      is_banned: isBanned,
+      banned_reason: isBanned ? reason || null : null,
+      banned_at: isBanned ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+      updated_by: user?.id ?? null,
+    },
+    { onConflict: 'user_id' }
+  )
   if (error) throw error
 }
 
 // Soft delete: anonymizes the profile. Full auth-account removal requires
 // the admin-delete-user Edge Function (service role) — see supabase/functions.
 export async function softDeleteUser(userId) {
-  const { error } = await supabase
-    .from('profiles')
-    .update({ is_deleted: true, is_banned: true, display_name: 'Deleted user' })
-    .eq('id', userId)
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const { error: modError } = await supabase.from('user_moderation').upsert(
+    {
+      user_id: userId,
+      is_deleted: true,
+      is_banned: true,
+      updated_at: new Date().toISOString(),
+      updated_by: user?.id ?? null,
+    },
+    { onConflict: 'user_id' }
+  )
+  if (modError) throw modError
+
+  const { error } = await supabase.from('profiles').update({ display_name: 'Deleted user' }).eq('id', userId)
   if (error) throw error
 }
 
@@ -674,7 +711,7 @@ export async function fetchDashboardStats() {
     supabase.from('product_posts').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
     supabase.from('places').select('*', { count: 'exact', head: true }),
     supabase.from('profiles').select('*', { count: 'exact', head: true }),
-    supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('is_banned', true),
+    supabase.from('user_moderation').select('*', { count: 'exact', head: true }).eq('is_banned', true),
   ])
   return {
     pendingReviews: pendingReviews ?? 0,
