@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import AdminLayout from '../components/AdminLayout'
 import ConfirmDialog from '../components/ConfirmDialog'
+import PlaceFormModal from '../components/PlaceFormModal'
 import { useAdminAuth } from '../context/AdminAuthContext'
 import { fetchPlaceSuggestions, setSuggestionStatus, deleteSuggestion } from '../lib/adminApi'
 
@@ -22,6 +23,7 @@ export default function Suggestions() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [pendingDelete, setPendingDelete] = useState(null)
+  const [creatingFrom, setCreatingFrom] = useState(null) // suggestion row being turned into a place
 
   const load = () => {
     setLoading(true)
@@ -30,8 +32,20 @@ export default function Suggestions() {
 
   useEffect(load, [status]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const act = async (suggestion, newStatus) => {
-    await setSuggestionStatus(suggestion, newStatus, user.id)
+  const dismiss = async (suggestion) => {
+    await setSuggestionStatus(suggestion, 'dismissed', user.id)
+    load()
+  }
+
+  // "Approve" used to just flip a status label on the suggestion — the
+  // place itself never got created, so it never showed up on the site.
+  // Now it opens the add-place form pre-filled with what the user
+  // submitted, and only marks the suggestion approved once the place is
+  // actually saved.
+  const handlePlaceCreated = async () => {
+    const suggestion = creatingFrom
+    setCreatingFrom(null)
+    await setSuggestionStatus(suggestion, 'approved', user.id)
     load()
   }
 
@@ -46,7 +60,7 @@ export default function Suggestions() {
       <div className="page-head">
         <div>
           <h1 style={{ fontSize: 24 }}>Place suggestions</h1>
-          <p>Requests from users who couldn't find a place in search, sent from the "Suggest a place" form on the site. Approving here doesn't add the listing — add it yourself from Places using the details (and photo, if there is one) shown below.</p>
+          <p>Requests from users who couldn't find a place in search, sent from the "Suggest a place" form on the site. Approving opens the add-place form pre-filled with these details — save it to publish the place and mark the suggestion approved.</p>
         </div>
       </div>
 
@@ -106,10 +120,10 @@ export default function Suggestions() {
                     <td>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {r.status === 'pending' && (
-                          <button className="btn-ghost btn-small" onClick={() => act(r, 'approved')}>Approve</button>
+                          <button className="btn-ghost btn-small" onClick={() => setCreatingFrom(r)}>Approve</button>
                         )}
                         {r.status === 'pending' && (
-                          <button className="btn-ghost btn-small" onClick={() => act(r, 'dismissed')}>Dismiss</button>
+                          <button className="btn-ghost btn-small" onClick={() => dismiss(r)}>Dismiss</button>
                         )}
                         <button className="btn-danger btn-small" onClick={() => setPendingDelete(r.id)}>Delete</button>
                       </div>
@@ -130,6 +144,21 @@ export default function Suggestions() {
           danger
           onConfirm={confirmDelete}
           onCancel={() => setPendingDelete(null)}
+        />
+      )}
+
+      {creatingFrom && (
+        <PlaceFormModal
+          place={null}
+          initialValues={{
+            name: creatingFrom.name,
+            category: creatingFrom.category,
+            neighborhood: creatingFrom.neighborhood,
+            address: creatingFrom.address,
+            photo_url: creatingFrom.photo_url,
+          }}
+          onClose={() => setCreatingFrom(null)}
+          onSaved={handlePlaceCreated}
         />
       )}
     </AdminLayout>
