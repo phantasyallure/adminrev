@@ -415,7 +415,7 @@ export async function deleteSearchKeyword(id) {
 export async function fetchBusinessClaims({ status = 'pending' } = {}) {
   let query = supabase
     .from('business_claims')
-    .select('id, place_id, first_name, last_name, phone, status, admin_notes, created_at, places:place_id ( name, slug )')
+    .select('id, place_id, user_id, first_name, last_name, phone, status, admin_notes, created_at, places:place_id ( name, slug )')
     .order('created_at', { ascending: false })
   if (status !== 'all') query = query.eq('status', status)
   const { data, error } = await query
@@ -425,6 +425,22 @@ export async function fetchBusinessClaims({ status = 'pending' } = {}) {
 
 export async function updateBusinessClaim(id, patch) {
   const { error } = await supabase.from('business_claims').update(patch).eq('id', id)
+  if (error) throw error
+}
+
+// Approving a claim used to only flip its status label — it never actually
+// made anyone an owner, so the site's "Claim this business" button kept
+// showing and the claimant had no real access. A claim already carries both
+// place_id and user_id (captured when they submitted the form), so approving
+// it now grants real ownership in the same call, then marks the claim
+// approved. If the claim has no user_id (shouldn't normally happen), this
+// falls back to just marking it approved so the admin can grant manually
+// from Places → Edit → Ownership instead.
+export async function approveBusinessClaim(claim, grantedBy) {
+  if (claim.user_id) {
+    await grantPlaceOwnership(claim.place_id, claim.user_id, grantedBy)
+  }
+  const { error } = await supabase.from('business_claims').update({ status: 'approved' }).eq('id', claim.id)
   if (error) throw error
 }
 
@@ -474,10 +490,19 @@ export async function searchProfilesForOwnership(q) {
     .from('profiles')
     .select('id, display_name, avatar_url')
     .ilike('display_name', `%${q.trim()}%`)
-    .eq('is_staff', false)
-    .limit(8)
+    .limit(20)
   if (error) throw error
-  return data ?? []
+  if (!data?.length) return []
+
+  // is_staff/is_deleted live in user_moderation, not on profiles (see
+  // fetchUsers above) — filter those out here instead of in the query.
+  const { data: moderation } = await supabase
+    .from('user_moderation')
+    .select('user_id, is_staff, is_deleted')
+    .in('user_id', data.map((p) => p.id))
+  const modByUser = Object.fromEntries((moderation ?? []).map((m) => [m.user_id, m]))
+
+  return data.filter((p) => !modByUser[p.id]?.is_staff && !modByUser[p.id]?.is_deleted).slice(0, 8)
 }
 
 // ---------- Category images (homepage tiles: restaurant / cafeteria / etc.) ----------
