@@ -34,6 +34,7 @@ export default function PlaceFormModal({ place, onClose, onSaved }) {
     cta_label: place?.cta_label || 'order',
     cta_url: place?.cta_url || '',
     menu_enabled: place?.menu_enabled || false,
+    analytics_enabled: place?.analytics_enabled || false,
   })
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -221,6 +222,17 @@ export default function PlaceFormModal({ place, onClose, onSaved }) {
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
               <input type="checkbox" checked={form.menu_enabled} onChange={(e) => setForm((f) => ({ ...f, menu_enabled: e.target.checked }))} />
               Enable menu (paid feature — the owner adds their own items once this is on)
+            </label>
+          </div>
+
+          <div className="field">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+              <input
+                type="checkbox"
+                checked={form.analytics_enabled}
+                onChange={(e) => setForm((f) => ({ ...f, analytics_enabled: e.target.checked }))}
+              />
+              Enable owner analytics (paid feature — views/clicks visible only to the owner)
             </label>
           </div>
 
