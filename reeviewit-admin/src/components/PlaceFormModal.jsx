@@ -17,17 +17,17 @@ const CTA_LABELS = [
   { key: 'booking', label: 'Book a table' },
 ]
 
-export default function PlaceFormModal({ place, onClose, onSaved }) {
+export default function PlaceFormModal({ place, initialValues, onClose, onSaved }) {
   const isEdit = Boolean(place)
   const { user: adminUser, session } = useAdminAuth()
   const [form, setForm] = useState({
-    name: place?.name || '',
+    name: place?.name || initialValues?.name || '',
     slug: place?.slug || '',
-    category: place?.category || 'restaurant',
-    neighborhood: place?.neighborhood || '',
-    address: place?.address || '',
+    category: place?.category || initialValues?.category || 'restaurant',
+    neighborhood: place?.neighborhood || initialValues?.neighborhood || '',
+    address: place?.address || initialValues?.address || '',
     price_range: place?.price_range || '',
-    cover_image_url: place?.cover_image_url || '',
+    cover_image_url: place?.cover_image_url || initialValues?.photo_url || '',
     keywords: (place?.keywords || []).join(', '),
     google_maps_url: place?.google_maps_url || '',
     cta_enabled: place?.cta_enabled || false,
@@ -138,7 +138,9 @@ export default function PlaceFormModal({ place, onClose, onSaved }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3 style={{ marginBottom: 18 }}>{isEdit ? 'Edit place' : 'Add a restaurant or cafeteria'}</h3>
+        <h3 style={{ marginBottom: 18 }}>
+          {isEdit ? 'Edit place' : initialValues ? 'Create place from suggestion' : 'Add a restaurant or cafeteria'}
+        </h3>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div className="form-grid">
             <div className="field">
