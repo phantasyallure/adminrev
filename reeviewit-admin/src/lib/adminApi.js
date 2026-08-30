@@ -288,6 +288,7 @@ export async function createPlace(place, accessToken) {
     cta_label: place.cta_label || null,
     cta_url: place.cta_url || null,
     menu_enabled: place.menu_enabled ?? false,
+    analytics_enabled: place.analytics_enabled ?? false,
   }
   const { data, error } = await supabase.from('places').insert(payload).select().single()
   if (error) throw error
@@ -312,6 +313,7 @@ export async function updatePlace(id, place, accessToken) {
     cta_label: place.cta_label || null,
     cta_url: place.cta_url || null,
     menu_enabled: place.menu_enabled ?? false,
+    analytics_enabled: place.analytics_enabled ?? false,
     updated_at: new Date().toISOString(),
   }
   const { error } = await supabase.from('places').update(payload).eq('id', id)
