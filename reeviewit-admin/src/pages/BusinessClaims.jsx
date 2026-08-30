@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AdminLayout from '../components/AdminLayout'
 import ConfirmDialog from '../components/ConfirmDialog'
-import { fetchBusinessClaims, updateBusinessClaim, deleteBusinessClaim } from '../lib/adminApi'
+import { useAdminAuth } from '../context/AdminAuthContext'
+import { fetchBusinessClaims, updateBusinessClaim, approveBusinessClaim, deleteBusinessClaim } from '../lib/adminApi'
 
 const TABS = [
   { key: 'pending', label: 'Pending' },
@@ -18,11 +19,13 @@ function formatDate(iso) {
 }
 
 export default function BusinessClaims() {
+  const { user: adminUser } = useAdminAuth()
   const [status, setStatus] = useState('pending')
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [pendingDelete, setPendingDelete] = useState(null)
   const [notesDraft, setNotesDraft] = useState({}) // id -> text, only while editing
+  const [approveError, setApproveError] = useState('')
 
   const load = () => {
     setLoading(true)
@@ -34,6 +37,16 @@ export default function BusinessClaims() {
   const setClaimStatus = async (id, newStatus) => {
     await updateBusinessClaim(id, { status: newStatus })
     load()
+  }
+
+  const approve = async (claim) => {
+    setApproveError('')
+    try {
+      await approveBusinessClaim(claim, adminUser?.id)
+      load()
+    } catch (err) {
+      setApproveError(`Couldn't grant ownership for ${claim.first_name} ${claim.last_name}: ${err.message}`)
+    }
   }
 
   const saveNotes = async (id) => {
@@ -59,7 +72,7 @@ export default function BusinessClaims() {
           <h1 style={{ fontSize: 24 }}>Business claims</h1>
           <p>
             People who tapped "Claim this business" on a place page. Reach out using the phone number below —
-            once you've verified them and taken payment, grant ownership from Places → Edit → Ownership.
+            once you've verified them and taken payment, hit "Approve" to grant them real ownership of the place.
           </p>
         </div>
       </div>
@@ -121,13 +134,20 @@ export default function BusinessClaims() {
                           <button className="btn-ghost btn-small" onClick={() => setClaimStatus(r.id, 'contacted')}>Mark contacted</button>
                         )}
                         {r.status !== 'approved' && (
-                          <button className="btn-ghost btn-small" onClick={() => setClaimStatus(r.id, 'approved')}>Mark approved</button>
+                          <button className="btn-ghost btn-small" onClick={() => approve(r)}>
+                            Approve (grants ownership)
+                          </button>
                         )}
                         {r.status !== 'rejected' && (
                           <button className="btn-ghost btn-small" onClick={() => setClaimStatus(r.id, 'rejected')}>Reject</button>
                         )}
                         <button className="btn-danger btn-small" onClick={() => setPendingDelete(r.id)}>Delete</button>
                       </div>
+                      {!r.user_id && r.status !== 'approved' && (
+                        <p className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+                          No linked account — approving will only mark this claim, not grant ownership.
+                        </p>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -136,6 +156,8 @@ export default function BusinessClaims() {
           </div>
         )}
       </div>
+
+      {approveError && <p className="error-text" style={{ marginTop: 10 }}>{approveError}</p>}
 
       {pendingDelete && (
         <ConfirmDialog
