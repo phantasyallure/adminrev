@@ -15,12 +15,13 @@
 // Called from the admin app with the admin's own session access token.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
-import { CORS_HEADERS, handleCorsPreflight } from '../_shared/cors.ts'
+import { corsHeadersFor, handleCorsPreflight } from '../_shared/cors.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 Deno.serve(async (req) => {
+  const CORS_HEADERS = corsHeadersFor(req)
   const preflight = handleCorsPreflight(req)
   if (preflight) return preflight
 
@@ -97,7 +98,10 @@ Deno.serve(async (req) => {
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     })
   } catch (err) {
-    return new Response(JSON.stringify({ lat: null, lng: null, error: String(err) }), {
+    // Log the real error server-side only — never echo raw exception/stack
+    // details back to the client.
+    console.error('[geocode-place] Nominatim request failed:', err)
+    return new Response(JSON.stringify({ lat: null, lng: null }), {
       status: 200,
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     })
