@@ -10,24 +10,35 @@
 // Called from the admin app with the admin's own session access token.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
+import { corsHeadersFor, handleCorsPreflight } from '../_shared/cors.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 Deno.serve(async (req) => {
+  const CORS_HEADERS = corsHeadersFor(req)
+  const preflight = handleCorsPreflight(req)
+  if (preflight) return preflight
+
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 })
+    return new Response('Method not allowed', { status: 405, headers: CORS_HEADERS })
   }
 
   const authHeader = req.headers.get('Authorization') ?? ''
   const callerToken = authHeader.replace('Bearer ', '')
   if (!callerToken) {
-    return new Response(JSON.stringify({ error: 'Missing Authorization header' }), { status: 401 })
+    return new Response(JSON.stringify({ error: 'Missing Authorization header' }), {
+      status: 401,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    })
   }
 
   const { targetUserId } = await req.json().catch(() => ({}))
   if (!targetUserId) {
-    return new Response(JSON.stringify({ error: 'targetUserId is required' }), { status: 400 })
+    return new Response(JSON.stringify({ error: 'targetUserId is required' }), {
+      status: 400,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    })
   }
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
@@ -35,7 +46,10 @@ Deno.serve(async (req) => {
   // Identify the caller from their access token, then check permissions.
   const { data: callerData, error: callerError } = await admin.auth.getUser(callerToken)
   if (callerError || !callerData?.user) {
-    return new Response(JSON.stringify({ error: 'Invalid session' }), { status: 401 })
+    return new Response(JSON.stringify({ error: 'Invalid session' }), {
+      status: 401,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    })
   }
 
   const { data: adminRow, error: adminError } = await admin
@@ -45,16 +59,23 @@ Deno.serve(async (req) => {
     .single()
 
   if (adminError || !adminRow?.can_delete_users) {
-    return new Response(JSON.stringify({ error: 'Not authorized' }), { status: 403 })
+    return new Response(JSON.stringify({ error: 'Not authorized' }), {
+      status: 403,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    })
   }
 
   const { error: deleteError } = await admin.auth.admin.deleteUser(targetUserId)
   if (deleteError) {
-    return new Response(JSON.stringify({ error: deleteError.message }), { status: 500 })
+    console.error('[admin-delete-user] deleteUser failed:', deleteError)
+    return new Response(JSON.stringify({ error: 'Could not delete this user.' }), {
+      status: 500,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    })
   }
 
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
   })
 })
