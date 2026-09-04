@@ -30,6 +30,8 @@ export default function PlaceFormModal({ place, initialValues, onClose, onSaved 
     cover_image_url: place?.cover_image_url || initialValues?.photo_url || '',
     keywords: (place?.keywords || []).join(', '),
     google_maps_url: place?.google_maps_url || '',
+    lat: place?.lat ?? '',
+    lng: place?.lng ?? '',
     cta_enabled: place?.cta_enabled || false,
     cta_label: place?.cta_label || 'order',
     cta_url: place?.cta_url || '',
@@ -185,6 +187,34 @@ export default function PlaceFormModal({ place, initialValues, onClose, onSaved 
             />
             <span className="muted">Open the place on Google Maps → Share → Copy link, then paste it here.</span>
           </div>
+
+          <div className="form-grid">
+            <div className="field">
+              <label>Latitude</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={form.lat}
+                onChange={set('lat')}
+                placeholder="e.g. 35.6969"
+              />
+            </div>
+            <div className="field">
+              <label>Longitude</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={form.lng}
+                onChange={set('lng')}
+                placeholder="e.g. -0.6335"
+              />
+            </div>
+          </div>
+          <span className="muted" style={{ marginTop: -8 }}>
+            Optional — fill both in to set the location yourself. On Google Maps, right-click the exact spot →
+            the coordinates are the first item in the menu; click to copy. Leave both blank to auto-detect from
+            the address or Google Maps link instead.
+          </span>
 
           <div className="field">
             <label>Cover photo</label>
