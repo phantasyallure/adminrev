@@ -48,6 +48,7 @@ export default function Places() {
   const [fixingCoords, setFixingCoords] = useState(false)
   const [coordsProgress, setCoordsProgress] = useState(null)
   const [coordsResult, setCoordsResult] = useState(null)
+  const [missingOnly, setMissingOnly] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -60,11 +61,17 @@ export default function Places() {
   }, [q]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setSelected(new Set()) }, [q])
 
-  const allSelected = places.length > 0 && selected.size === places.length
+  const missingLocation = (p) => p.lat == null || p.lng == null
+  const missingCount = places.filter(missingLocation).length
+  const visiblePlaces = missingOnly ? places.filter(missingLocation) : places
+
+  useEffect(() => { setSelected(new Set()) }, [missingOnly]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const allSelected = visiblePlaces.length > 0 && selected.size === visiblePlaces.length
   const someSelected = selected.size > 0 && !allSelected
 
   const toggleSelectAll = () => {
-    setSelected(allSelected ? new Set() : new Set(places.map((p) => p.id)))
+    setSelected(allSelected ? new Set() : new Set(visiblePlaces.map((p) => p.id)))
   }
   const toggleSelectOne = (id) => {
     setSelected((prev) => {
@@ -161,6 +168,14 @@ export default function Places() {
                 : 'Checking places…'
               : 'Fix missing locations'}
           </button>
+          <button
+            className={missingOnly ? 'btn-primary btn-small' : 'btn-ghost btn-small'}
+            onClick={() => setMissingOnly((v) => !v)}
+            disabled={loading}
+            title="Show only places with no lat/lng, so you can fix them one by one via Edit."
+          >
+            {missingOnly ? '✓ ' : ''}Missing location{missingCount > 0 ? ` (${missingCount})` : ''}
+          </button>
           <SearchInput value={q} onChange={setQ} placeholder="Search places…" />
           <button
             className="btn-ghost btn-small"
@@ -188,6 +203,8 @@ export default function Places() {
           <p>Loading…</p>
         ) : places.length === 0 ? (
           <div className="empty-state">No places yet — add the first one.</div>
+        ) : visiblePlaces.length === 0 ? (
+          <div className="empty-state">No places with a missing location — you're all caught up.</div>
         ) : (
           <div className="table-wrap">
             <table>
@@ -212,7 +229,7 @@ export default function Places() {
                 </tr>
               </thead>
               <tbody>
-                {places.map((p) => (
+                {visiblePlaces.map((p) => (
                   <tr key={p.id}>
                     <td>
                       <input
@@ -226,6 +243,11 @@ export default function Places() {
                     </td>
                     <td>
                       {p.name} {p.google_maps_url && <span title="Has a map link">📍</span>}
+                      {missingLocation(p) && (
+                        <span className="badge-pill badge-rejected" style={{ marginLeft: 6 }} title="No lat/lng — won't show under 'Près de moi'">
+                          No location
+                        </span>
+                      )}
                       <div className="muted">{p.neighborhood}</div>
                     </td>
                     <td>{p.category}</td>
