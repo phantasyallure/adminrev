@@ -158,7 +158,14 @@ export function extractLatLngFromMapsUrl(url) {
 // Nominatim's usage policy requires an identifying User-Agent and blocks
 // bulk/automated querying from one client, which a browser-based fetch
 // reliably tripped once there were more than a handful of places to fix.
-async function resolveCoords({ google_maps_url, address, neighborhood, name }, accessToken) {
+async function resolveCoords({ lat, lng, google_maps_url, address, neighborhood, name }, accessToken) {
+  // Explicit manual coordinates (typed into the form) always win — this is
+  // the "I looked it up myself" override, and should never get silently
+  // clobbered by auto-geocoding.
+  const manualLat = lat === '' || lat == null ? null : Number(lat)
+  const manualLng = lng === '' || lng == null ? null : Number(lng)
+  if (Number.isFinite(manualLat) && Number.isFinite(manualLng)) return { lat: manualLat, lng: manualLng }
+
   const fromUrl = extractLatLngFromMapsUrl(google_maps_url)
   if (fromUrl) return fromUrl
 
