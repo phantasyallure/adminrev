@@ -7,6 +7,7 @@ import Reviews from './pages/Reviews'
 import ProductPosts from './pages/ProductPosts'
 import Places from './pages/Places'
 import Keywords from './pages/Keywords'
+import KeywordSuggestions from './pages/KeywordSuggestions'
 import BusinessClaims from './pages/BusinessClaims'
 import Import from './pages/Import'
 import Suggestions from './pages/Suggestions'
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/products" element={<ProtectedRoute requires="can_approve_reviews"><ProductPosts /></ProtectedRoute>} />
         <Route path="/places" element={<ProtectedRoute requires="can_manage_places"><Places /></ProtectedRoute>} />
         <Route path="/keywords" element={<ProtectedRoute requires="can_manage_places"><Keywords /></ProtectedRoute>} />
+        <Route path="/keyword-suggestions" element={<ProtectedRoute requires="can_manage_places"><KeywordSuggestions /></ProtectedRoute>} />
         <Route path="/business-claims" element={<ProtectedRoute requires="can_manage_places"><BusinessClaims /></ProtectedRoute>} />
         <Route path="/import" element={<ProtectedRoute requires="can_manage_places"><Import /></ProtectedRoute>} />
         <Route path="/suggestions" element={<ProtectedRoute requires="can_manage_places"><Suggestions /></ProtectedRoute>} />
