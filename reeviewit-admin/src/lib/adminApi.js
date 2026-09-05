@@ -864,6 +864,11 @@ const IMPORT_HEADER_ALIASES = {
   photourl: 'photo_url',
   photo: 'photo_url',
   imageurl: 'photo_url',
+  latitude: 'lat',
+  lat: 'lat',
+  longitude: 'lng',
+  lng: 'lng',
+  long: 'lng',
 }
 
 function normalizeHeader(h) {
@@ -890,6 +895,9 @@ export function mapImportSheetRows(sheetRows) {
         rec.google_rating = Number(raw) || null
       } else if (field === 'google_rating_count') {
         rec.google_rating_count = parseInt(raw, 10) || null
+      } else if (field === 'lat' || field === 'lng') {
+        const n = Number(raw)
+        if (Number.isFinite(n)) rec[field] = n
       } else {
         rec[field] = String(raw).trim()
       }
@@ -910,6 +918,8 @@ export async function stagePlaceImports(rows, { batchLabel, createdBy } = {}) {
     google_rating: r.google_rating ?? null,
     google_rating_count: r.google_rating_count ?? null,
     photo_url: r.photo_url || null,
+    lat: r.lat ?? null,
+    lng: r.lng ?? null,
     batch_label: batchLabel || null,
     created_by: createdBy || null,
   }))
@@ -968,6 +978,8 @@ export async function publishPlaceImport(row, accessToken) {
       keywords: row.keywords,
       google_maps_url: row.google_maps_url,
       cover_image_url: coverImageUrl,
+      lat: row.lat,
+      lng: row.lng,
     }, accessToken)
 
     if (row.google_rating != null || row.google_rating_count != null) {
