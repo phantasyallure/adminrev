@@ -17,7 +17,9 @@ export default function KeywordSuggestions() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [checked, setChecked] = useState({}) // { [suggestionId]: Set<keyword> }
+  const [selected, setSelected] = useState(() => new Set()) // suggestion ids selected for bulk actions
   const [savingId, setSavingId] = useState(null)
+  const [bulkBusy, setBulkBusy] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [scanProgress, setScanProgress] = useState(null)
   const [scanResult, setScanResult] = useState(null)
@@ -28,11 +30,28 @@ export default function KeywordSuggestions() {
       .then((data) => {
         setRows(data)
         setChecked(Object.fromEntries(data.map((r) => [r.id, new Set(r.suggested_keywords)])))
+        setSelected(new Set())
       })
       .catch(console.error)
       .finally(() => setLoading(false))
   }
   useEffect(load, [status]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const selectableRows = rows.filter((r) => r.suggested_keywords?.length)
+  const allSelected = selectableRows.length > 0 && selected.size === selectableRows.length
+  const someSelected = selected.size > 0 && !allSelected
+
+  const toggleSelectAll = () => {
+    setSelected(allSelected ? new Set() : new Set(selectableRows.map((r) => r.id)))
+  }
+  const toggleSelectOne = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const toggleKeyword = (rowId, kw) => {
     setChecked((prev) => {
@@ -67,6 +86,36 @@ export default function KeywordSuggestions() {
     } finally {
       setSavingId(null)
     }
+  }
+
+  // Approves every selected row using whichever keywords are currently
+  // checked for it (unchecking a keyword before bulk-approving still
+  // excludes just that one, same as approving one row at a time).
+  const handleApproveSelected = async () => {
+    setBulkBusy(true)
+    const targets = rows.filter((r) => selected.has(r.id) && checked[r.id]?.size)
+    for (const row of targets) {
+      try {
+        await approveKeywordSuggestion(row, Array.from(checked[row.id]))
+      } catch (err) {
+        console.error(err)
+      }
+    }
+    setBulkBusy(false)
+    load()
+  }
+
+  const handleRejectSelected = async () => {
+    setBulkBusy(true)
+    for (const id of selected) {
+      try {
+        await rejectKeywordSuggestion(id)
+      } catch (err) {
+        console.error(err)
+      }
+    }
+    setBulkBusy(false)
+    load()
   }
 
   const handleScanAll = async () => {
@@ -121,6 +170,20 @@ export default function KeywordSuggestions() {
         ))}
       </div>
 
+      {status === 'pending' && selected.size > 0 && (
+        <div className="page-head" style={{ marginBottom: 12 }}>
+          <span className="muted">{selected.size} selected</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn-primary btn-small" onClick={handleApproveSelected} disabled={bulkBusy}>
+              {bulkBusy ? 'Approving…' : `Approve selected (${selected.size})`}
+            </button>
+            <button className="btn-danger btn-small" onClick={handleRejectSelected} disabled={bulkBusy}>
+              {bulkBusy ? 'Rejecting…' : `Reject selected (${selected.size})`}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         {loading ? (
           <p>Loading…</p>
@@ -133,6 +196,17 @@ export default function KeywordSuggestions() {
             <table>
               <thead>
                 <tr>
+                  {status === 'pending' && (
+                    <th>
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        ref={(el) => { if (el) el.indeterminate = someSelected }}
+                        onChange={toggleSelectAll}
+                        title="Select all rows with suggestions"
+                      />
+                    </th>
+                  )}
                   <th>Photo</th>
                   <th>Place</th>
                   <th>Existing keywords</th>
@@ -143,6 +217,17 @@ export default function KeywordSuggestions() {
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id}>
+                    {status === 'pending' && (
+                      <td>
+                        {r.suggested_keywords?.length ? (
+                          <input
+                            type="checkbox"
+                            checked={selected.has(r.id)}
+                            onChange={() => toggleSelectOne(r.id)}
+                          />
+                        ) : null}
+                      </td>
+                    )}
                     <td>
                       {r.place?.cover_image_url ? (
                         <img
