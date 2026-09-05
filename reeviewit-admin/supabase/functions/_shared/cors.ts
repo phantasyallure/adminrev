@@ -16,6 +16,7 @@
 // from this app's own origins. Add any other real deployment origin below.
 const ALLOWED_ORIGINS = new Set([
   'https://rayyek.vercel.app',
+  'https://adminrev.vercel.app', // the admin panel's actual production domain
   'http://localhost:5173', // local admin dev server (vite default)
 ])
 
