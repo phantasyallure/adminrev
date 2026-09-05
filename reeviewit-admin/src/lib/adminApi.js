@@ -1005,3 +1005,89 @@ export async function skipPlaceImport(id) {
   const { error } = await supabase.from('place_imports').update({ status: 'skipped' }).eq('id', id)
   if (error) throw error
 }
+
+// ---------- AI keyword suggestions ----------
+
+// Calls suggest-keywords for ONE place. Scanning many places is done by
+// looping this from the client with a delay between calls (see
+// scanAllPlacesForKeywords) rather than looping server-side, so a long
+// scan never risks the edge function's own execution-time limit.
+export async function suggestKeywordsForPlace(placeId, accessToken) {
+  const res = await fetch(functionUrl('suggest-keywords'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ place_id: placeId }),
+  })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(body?.error || `Request failed (${res.status})`)
+  return body.suggested || []
+}
+
+// Scans every place that doesn't already have a pending suggestion,
+// calling onProgress after each one so the UI can show a live counter.
+// A short pause between calls keeps this comfortably inside Gemini's free
+// tier per-minute rate limit even across a couple hundred places.
+export async function scanAllPlacesForKeywords(accessToken, onProgress) {
+  const { data: places, error } = await supabase.from('places').select('id')
+  if (error) throw error
+
+  const { data: pending } = await supabase.from('keyword_suggestions').select('place_id').eq('status', 'pending')
+  const alreadyPending = new Set((pending || []).map((r) => r.place_id))
+  const targets = (places || []).filter((p) => !alreadyPending.has(p.id))
+
+  const results = { total: targets.length, done: 0, succeeded: 0, failed: 0 }
+  for (const p of targets) {
+    try {
+      await suggestKeywordsForPlace(p.id, accessToken)
+      results.succeeded += 1
+    } catch (err) {
+      console.error(`[scanAllPlacesForKeywords] place ${p.id} failed:`, err)
+      results.failed += 1
+    }
+    results.done += 1
+    onProgress?.({ ...results })
+    // Gemini's free tier is rate-limited per minute — pace requests rather
+    // than firing 200+ at once.
+    await new Promise((r) => setTimeout(r, 4200))
+  }
+  return results
+}
+
+export async function fetchKeywordSuggestions({ status = 'pending' } = {}) {
+  const { data, error } = await supabase
+    .from('keyword_suggestions')
+    .select('*, place:places(id, name, category, neighborhood, keywords, cover_image_url)')
+    .eq('status', status)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
+// Merges the checked suggested keywords into the place's real keywords
+// (deduplicated) and marks the suggestion row approved.
+export async function approveKeywordSuggestion(suggestion, keywordsToAdd) {
+  const { data: place, error: placeError } = await supabase
+    .from('places')
+    .select('keywords')
+    .eq('id', suggestion.place_id)
+    .single()
+  if (placeError) throw placeError
+
+  const merged = Array.from(new Set([...(place.keywords || []), ...keywordsToAdd]))
+  const { error: updateError } = await supabase.from('places').update({ keywords: merged }).eq('id', suggestion.place_id)
+  if (updateError) throw updateError
+
+  const { error: statusError } = await supabase
+    .from('keyword_suggestions')
+    .update({ status: 'approved', reviewed_at: new Date().toISOString() })
+    .eq('id', suggestion.id)
+  if (statusError) throw statusError
+}
+
+export async function rejectKeywordSuggestion(id) {
+  const { error } = await supabase
+    .from('keyword_suggestions')
+    .update({ status: 'rejected', reviewed_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw error
+}
