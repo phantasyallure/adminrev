@@ -108,9 +108,15 @@ export default function Import() {
   }
 
   const handleFieldSave = async (row, field, value) => {
-    const patch = field === 'keywords'
-      ? { keywords: value.split(',').map((k) => k.trim()).filter(Boolean) }
-      : { [field]: value }
+    let patch
+    if (field === 'keywords') {
+      patch = { keywords: value.split(',').map((k) => k.trim()).filter(Boolean) }
+    } else if (field === 'lat' || field === 'lng') {
+      const n = value === '' ? null : Number(value)
+      patch = { [field]: Number.isFinite(n) ? n : null }
+    } else {
+      patch = { [field]: value }
+    }
     setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, ...patch } : r)))
     try {
       await updatePlaceImport(row.id, patch)
@@ -183,7 +189,9 @@ export default function Import() {
           <p>Upload an Excel sheet of scraped places, check them over, then publish.</p>
           <p className="muted" style={{ marginTop: 4 }}>
             Columns: Name, Category, Neighborhood, Address, Keywords (comma-separated), Google Maps Link,
-            Google Rating, Google Rating Count, Photo URL. Only Name is required.
+            Google Rating, Google Rating Count, Photo URL, Latitude, Longitude. Only Name is required —
+            but a row with no Latitude/Longitude and no address a geocoder can read will publish with no
+            location, so fix those before publishing rather than after.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -253,6 +261,8 @@ export default function Import() {
                   <th>Category</th>
                   <th>Neighborhood</th>
                   <th>Keywords</th>
+                  <th>Latitude</th>
+                  <th>Longitude</th>
                   <th>Map</th>
                   <th>Google rating</th>
                   <th></th>
@@ -327,6 +337,31 @@ export default function Import() {
                         placeholder="grilled, terrace…"
                         style={{ width: 160 }}
                       />
+                    </td>
+                    <td>
+                      <input
+                        defaultValue={r.lat ?? ''}
+                        onBlur={(e) => handleFieldSave(r, 'lat', e.target.value)}
+                        placeholder="35.69…"
+                        style={{ width: 90, borderColor: r.lat == null ? undefined : undefined }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        defaultValue={r.lng ?? ''}
+                        onBlur={(e) => handleFieldSave(r, 'lng', e.target.value)}
+                        placeholder="-0.63…"
+                        style={{ width: 90 }}
+                      />
+                      {(r.lat == null || r.lng == null) && (
+                        <div
+                          className="badge-pill badge-rejected"
+                          style={{ marginTop: 4, display: 'inline-block' }}
+                          title="No coordinates typed in — will fall back to reading the address on publish, which fails for Plus Codes/cooperative-style addresses"
+                        >
+                          No coords set
+                        </div>
+                      )}
                     </td>
                     <td>
                       {r.google_maps_url ? (
