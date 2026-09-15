@@ -3,6 +3,7 @@ import { useAdminAuth } from '../context/AdminAuthContext'
 
 const LINKS = [
   { to: '/', label: 'Dashboard', icon: '⌂', requires: null, end: true },
+  { to: '/visitors', label: 'Visitors', icon: '🌐', requires: null },
   { to: '/reviews', label: 'Reviews', icon: '★', requires: 'can_approve_reviews' },
   { to: '/products', label: 'Products', icon: '▣', requires: 'can_approve_reviews' },
   { to: '/places', label: 'Places', icon: '⚑', requires: 'can_manage_places' },
