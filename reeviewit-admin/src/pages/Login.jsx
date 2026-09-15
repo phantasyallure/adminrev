@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAdminAuth } from '../context/AdminAuthContext'
+import TurnstileWidget from '../components/TurnstileWidget'
 
 export default function Login() {
   const { session, adminProfile, notAuthorized, loading, signIn, signOut } = useAdminAuth()
@@ -9,6 +10,13 @@ export default function Login() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  // TurnstileWidget renders nothing (and this stays null) unless
+  // VITE_TURNSTILE_SITE_KEY is set — safe default, no bot check until
+  // it's configured. captchaResetKey forces a fresh widget/challenge
+  // after every attempt, since a used or errored token can't be reused.
+  const [captchaToken, setCaptchaToken] = useState(null)
+  const [captchaResetKey, setCaptchaResetKey] = useState(0)
+
   if (!loading && session && adminProfile) return <Navigate to="/" replace />
 
   const handleSubmit = async (e) => {
@@ -16,9 +24,11 @@ export default function Login() {
     setError('')
     setSubmitting(true)
     try {
-      await signIn(email, password)
+      await signIn(email, password, captchaToken)
     } catch (err) {
       setError(err.message || 'Sign in failed')
+      setCaptchaToken(null)
+      setCaptchaResetKey((k) => k + 1)
     } finally {
       setSubmitting(false)
     }
@@ -47,6 +57,12 @@ export default function Login() {
               <label htmlFor="password">Password</label>
               <input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
+            <TurnstileWidget
+              key={captchaResetKey}
+              onVerify={setCaptchaToken}
+              onExpire={() => setCaptchaToken(null)}
+              onError={() => setCaptchaToken(null)}
+            />
             {error && <p className="error-text">{error}</p>}
             <button className="btn-primary" type="submit" disabled={submitting} style={{ marginTop: 6 }}>
               {submitting ? 'Signing in…' : 'Sign in'}
