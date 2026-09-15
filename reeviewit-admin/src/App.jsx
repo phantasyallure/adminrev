@@ -3,6 +3,7 @@ import { AdminAuthProvider } from './context/AdminAuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import Visitors from './pages/Visitors'
 import Reviews from './pages/Reviews'
 import ProductPosts from './pages/ProductPosts'
 import Places from './pages/Places'
@@ -23,6 +24,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/visitors" element={<ProtectedRoute><Visitors /></ProtectedRoute>} />
         <Route path="/reviews" element={<ProtectedRoute requires="can_approve_reviews"><Reviews /></ProtectedRoute>} />
         <Route path="/products" element={<ProtectedRoute requires="can_approve_reviews"><ProductPosts /></ProtectedRoute>} />
         <Route path="/places" element={<ProtectedRoute requires="can_manage_places"><Places /></ProtectedRoute>} />
