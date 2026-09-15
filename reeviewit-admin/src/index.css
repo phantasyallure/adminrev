@@ -265,7 +265,7 @@ tr:last-child td { border-bottom: none; }
 
 .visitor-row {
   display: grid;
-  grid-template-columns: 1.3fr 1fr auto;
+  grid-template-columns: 1.2fr 0.8fr 0.8fr auto;
   align-items: center;
   gap: 8px;
   font-size: 13px;
@@ -277,4 +277,7 @@ tr:last-child td { border-bottom: none; }
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
   color: var(--ink-soft);
+}
+@media (max-width: 600px) {
+  .visitor-row { grid-template-columns: 1fr 1fr; row-gap: 2px; }
 }
