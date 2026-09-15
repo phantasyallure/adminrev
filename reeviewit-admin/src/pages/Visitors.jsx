@@ -11,6 +11,9 @@ const COUNTRY_NAMES = {
   IN: 'India', BR: 'Brazil', Unknown: 'Unknown',
 }
 
+const DEVICE_ICON = { mobile: '📱', desktop: '💻', tablet: '📟', unknown: '❔' }
+const DEVICE_LABEL = { mobile: 'Mobile', desktop: 'Desktop', tablet: 'Tablet', unknown: 'Unknown' }
+
 function countryLabel(code) {
   return COUNTRY_NAMES[code] || code
 }
@@ -46,6 +49,7 @@ export default function Visitors() {
   }, [session])
 
   const maxCountryCount = stats?.byCountry?.[0]?.count || 1
+  const maxDeviceCount = stats?.byDevice?.[0]?.count || 1
 
   return (
     <AdminLayout title="Visitors">
@@ -101,21 +105,46 @@ export default function Visitors() {
         </div>
 
         <div className="card">
-          <h3 style={{ marginBottom: 14 }}>Recent visits</h3>
-          {!stats?.recent?.length ? (
-            <p className="muted">Nothing to show yet.</p>
+          <h3 style={{ marginBottom: 14 }}>By device</h3>
+          {!stats?.byDevice?.length ? (
+            <p className="muted">No visits recorded yet.</p>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {stats.recent.map((v, i) => (
-                <div key={i} className="visitor-row">
-                  <span className="visitor-ip">{v.ip_address || '—'}</span>
-                  <span>{countryFlag(v.country)} {v.country || '—'}</span>
-                  <span className="muted">{timeAgo(v.created_at)}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {stats.byDevice.map((d) => (
+                <div key={d.device}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 5 }}>
+                    <span>{DEVICE_ICON[d.device] || '❔'} {DEVICE_LABEL[d.device] || d.device}</span>
+                    <span className="muted">{d.count}</span>
+                  </div>
+                  <div className="visitor-bar-track">
+                    <div
+                      className="visitor-bar-fill"
+                      style={{ width: `${Math.max(4, (d.count / maxDeviceCount) * 100)}%` }}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 18 }}>
+        <h3 style={{ marginBottom: 14 }}>Recent visits</h3>
+        {!stats?.recent?.length ? (
+          <p className="muted">Nothing to show yet.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {stats.recent.map((v, i) => (
+              <div key={i} className="visitor-row">
+                <span className="visitor-ip">{v.ip_address || '—'}</span>
+                <span>{countryFlag(v.country)} {v.country || '—'}</span>
+                <span>{DEVICE_ICON[v.device_type] || '❔'} {DEVICE_LABEL[v.device_type] || 'Unknown'}</span>
+                <span className="muted">{timeAgo(v.created_at)}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </AdminLayout>
   )
