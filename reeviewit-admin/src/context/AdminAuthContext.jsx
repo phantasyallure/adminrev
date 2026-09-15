@@ -75,8 +75,12 @@ export function AdminAuthProvider({ children }) {
     return () => listener.subscription.unsubscribe()
   }, [loadAdminRow])
 
-  const signIn = async (email, password) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+  const signIn = async (email, password, captchaToken) => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      options: { captchaToken },
+    })
     if (error) throw error
   }
 
