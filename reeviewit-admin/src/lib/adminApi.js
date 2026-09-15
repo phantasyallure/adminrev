@@ -1091,3 +1091,15 @@ export async function rejectKeywordSuggestion(id) {
     .eq('id', id)
   if (error) throw error
 }
+// ---------- Visitor stats ----------
+export async function fetchVisitorStats(accessToken) {
+  const res = await fetch(functionUrl('get-visitor-stats'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error || 'Could not load visitor stats')
+  }
+  return res.json()
+}
