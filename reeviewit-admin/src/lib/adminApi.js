@@ -184,7 +184,7 @@ async function resolveCoords({ lat, lng, google_maps_url, address, neighborhood,
   try {
     const res = await fetch(functionUrl('geocode-place'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      headers: functionHeaders(accessToken),
       body: JSON.stringify({ address: fallbackAddress }),
     })
     if (!res.ok) return null
@@ -552,6 +552,17 @@ export function functionUrl(name) {
   return `${base}/functions/v1/${name}`
 }
 
+// Headers for calling an Edge Function directly with fetch. Supabase's gateway
+// expects the project key in `apikey` as well as the user's token in
+// Authorization (supabase.functions.invoke sends both); without it some
+// projects answer 401 "Invalid credentials" before the function even runs.
+export function functionHeaders(accessToken) {
+  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` }
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY
+  if (key) headers.apikey = key
+  return headers
+}
+
 // ---------- Users ----------
 
 export async function fetchUsers({ q = '' } = {}) {
@@ -637,7 +648,7 @@ export async function softDeleteUser(userId) {
 export async function hardDeleteUser(userId, accessToken) {
   const res = await fetch(functionUrl('admin-delete-user'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    headers: functionHeaders(accessToken),
     body: JSON.stringify({ targetUserId: userId }),
   })
   if (!res.ok) {
@@ -717,7 +728,7 @@ export async function findProfileByName(q) {
 export async function createStaffAdmin({ email, password, roleLabel, permissions }, accessToken) {
   const res = await fetch(functionUrl('super-endpoint'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    headers: functionHeaders(accessToken),
     body: JSON.stringify({ email, password, roleLabel, permissions }),
   })
   if (!res.ok) {
@@ -955,7 +966,7 @@ export async function deletePlaceImport(id) {
 async function rehostImportPhoto(photoUrl, accessToken) {
   const res = await fetch(functionUrl('import-place-photo'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    headers: functionHeaders(accessToken),
     body: JSON.stringify({ photoUrl }),
   })
   if (!res.ok) {
@@ -1026,7 +1037,7 @@ export async function skipPlaceImport(id) {
 export async function suggestKeywordsForPlace(placeId, accessToken) {
   const res = await fetch(functionUrl('suggest-keywords'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    headers: functionHeaders(accessToken),
     body: JSON.stringify({ place_id: placeId }),
   })
   const body = await res.json().catch(() => ({}))
@@ -1106,7 +1117,7 @@ export async function rejectKeywordSuggestion(id) {
 export async function fetchVisitorStats(accessToken) {
   const res = await fetch(functionUrl('get-visitor-stats'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    headers: functionHeaders(accessToken),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
