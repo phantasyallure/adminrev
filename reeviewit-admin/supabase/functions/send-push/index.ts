@@ -22,6 +22,28 @@ const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY') ?? ''
 const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY') ?? ''
 const VAPID_SUBJECT = Deno.env.get('VAPID_SUBJECT') ?? 'mailto:admin@example.com'
 
+// Accepts "/lieux/foo", "#comment-ca-marche", a full URL of the main site
+// ("https://rayyek.vercel.app/#x"), or even the common typo "/https://..." and
+// always returns a safe internal path ("/lieux/foo", "/#comment-ca-marche").
+const SITE_HOSTS = new Set(['rayyek.vercel.app', 'reeviewit.vercel.app'])
+function normalizeLinkPath(raw: unknown): string {
+  let v = String(raw ?? '').trim()
+  if (!v) return '/'
+  v = v.replace(/^\/+(?=https?:\/\/)/i, '') // "/https://x" -> "https://x"
+  if (/^https?:\/\//i.test(v)) {
+    try {
+      const u = new URL(v)
+      if (!SITE_HOSTS.has(u.hostname)) return '/' // never link off-site
+      v = `${u.pathname}${u.search}${u.hash}`
+    } catch {
+      return '/'
+    }
+  }
+  if (v.startsWith('#')) v = `/${v}`
+  if (!v.startsWith('/') || v.startsWith('//')) return '/'
+  return v.slice(0, 300)
+}
+
 Deno.serve(async (req) => {
   const CORS_HEADERS = corsHeadersFor(req)
   const json = (body: unknown, status = 200) =>
@@ -47,8 +69,7 @@ Deno.serve(async (req) => {
   const message = String(input.body ?? '').trim().slice(0, 300)
   const audience = input.audience === 'user' ? 'user' : 'all'
   const userId = audience === 'user' ? String(input.userId ?? '') : null
-  let linkPath = String(input.linkPath ?? '/').trim() || '/'
-  if (!linkPath.startsWith('/') || linkPath.startsWith('//')) linkPath = '/' // internal paths only
+  const linkPath = normalizeLinkPath(input.linkPath)
 
   if (!title || !message) return json({ error: 'Title and message are required.' }, 400)
   if (audience === 'user' && !userId) return json({ error: 'Pick a user.' }, 400)
