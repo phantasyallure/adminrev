@@ -115,7 +115,8 @@ export default function Notifications() {
           </div>
           <div className="field">
             <label>Opens this page on the site</label>
-            <input value={linkPath} onChange={(e) => setLinkPath(e.target.value)} placeholder="/" />
+            <input value={linkPath} onChange={(e) => setLinkPath(e.target.value)} placeholder="/ or /lieux/my-place or /#comment-ca-marche" />
+            <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>A path on the site, e.g. <code>/</code> or <code>/#comment-ca-marche</code>. A full rayyek.vercel.app link also works.</p>
           </div>
 
           {error && <p className="error-text">{error}</p>}
