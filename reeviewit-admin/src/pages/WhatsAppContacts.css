@@ -7,3 +7,5 @@
 }
 .wa-btn:hover { filter: brightness(.92); transform: translateY(-1px); }
 .wa-bad { font-size: 13px; color: #93630c; white-space: nowrap; }
+.wa-del { color: var(--ink-faint); margin-left: 0; }
+.wa-del:hover { background: #fbe0dc; color: var(--danger); }
