@@ -29,6 +29,7 @@ const PATHS = {
   send: 'M21 3L10 14M21 3l-7 18-4-7-7-4z',
   check: 'M5 12.5l4.5 4.5L19 7.5',
   chart: 'M4 20V10M10 20V4M16 20v-8M22 20H2',
+  whatsapp: 'M20 12a8 8 0 01-11.8 7L4 20l1.1-4A8 8 0 1120 12zM9.5 9c.3 2.5 2.5 4.700 5 5l.8-1.200-1.800-.9-.7.6c-.8-.4-1.400-1-1.800-1.800l.6-.7-.9-1.800z',
 }
 
 export default function Icon({ name, size = 18, className = '', strokeWidth = 1.8 }) {
