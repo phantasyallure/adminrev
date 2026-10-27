@@ -21,6 +21,7 @@ import Badges from './pages/Badges'
 import Roles from './pages/Roles'
 import Categories from './pages/Categories'
 import Notifications from './pages/Notifications'
+import WhatsAppContacts from './pages/WhatsAppContacts'
 
 export default function App() {
   return (
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="/badges" element={<ProtectedRoute requires="can_award_badges"><Badges /></ProtectedRoute>} />
         <Route path="/categories" element={<ProtectedRoute requires="can_manage_places"><Categories /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute requires="can_send_notifications"><Notifications /></ProtectedRoute>} />
+        <Route path="/whatsapp" element={<ProtectedRoute requires="can_manage_places"><WhatsAppContacts /></ProtectedRoute>} />
         <Route path="/roles" element={<ProtectedRoute requires="can_manage_roles"><Roles /></ProtectedRoute>} />
       </Routes>
     </AdminAuthProvider>
