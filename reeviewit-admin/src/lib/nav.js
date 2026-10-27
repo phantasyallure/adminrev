@@ -38,5 +38,6 @@ export const NAV = [
       { to: '/notifications', label: 'Notifications', icon: 'bell', requires: 'can_send_notifications' },
     ],
   },
+  { to: '/whatsapp', label: 'WhatsApp', icon: 'whatsapp', requires: 'can_manage_places' },
   { to: '/roles', label: 'Admin roles', icon: 'key', requires: 'can_manage_roles' },
 ]
