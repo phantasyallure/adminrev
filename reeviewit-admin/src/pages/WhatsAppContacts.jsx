@@ -1,73 +1,151 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import AdminLayout from '../components/AdminLayout'
+import ConfirmDialog from '../components/ConfirmDialog'
 import SearchInput from '../components/SearchInput'
 import Icon from '../components/Icon'
-import { WA_CONTACTS } from '../lib/whatsappContacts'
+import {
+  parsePhone, parseContactsFile, fetchContacts, importContacts, setContacted, deleteContacts,
+} from '../lib/whatsappApi'
 import './WhatsAppContacts.css'
 
-const TABS = ['All', 'Upscale', 'Fast Food', 'Unverified']
-const LS_DONE = 'admin.whatsapp.contacted'
 const LS_MSG = 'admin.whatsapp.message'
 const DEFAULT_MSG = 'Bonjour, je vous contacte de la part de Rayyek.'
 
-const keyOf = (c) => `${c.category}|${c.name}`
-
-function load(key, fallback) {
-  try {
-    const v = localStorage.getItem(key)
-    return v === null ? fallback : JSON.parse(v)
-  } catch {
-    return fallback
-  }
-}
-
 export default function WhatsAppContacts() {
+  const [contacts, setContacts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [tab, setTab] = useState('All')
   const [q, setQ] = useState('')
   const [hideDone, setHideDone] = useState(false)
-  const [done, setDone] = useState(() => load(LS_DONE, {}))
-  const [msg, setMsg] = useState(() => load(LS_MSG, DEFAULT_MSG))
+  const [selected, setSelected] = useState(new Set())
+  const [confirm, setConfirm] = useState(null) // { ids, label }
+  const [busy, setBusy] = useState(false)
+  const fileRef = useRef(null)
+  const [msg, setMsg] = useState(() => {
+    try { return localStorage.getItem(LS_MSG) ?? DEFAULT_MSG } catch { return DEFAULT_MSG }
+  })
 
   useEffect(() => {
-    try { localStorage.setItem(LS_DONE, JSON.stringify(done)) } catch { /* ignore */ }
-  }, [done])
-  useEffect(() => {
-    try { localStorage.setItem(LS_MSG, JSON.stringify(msg)) } catch { /* ignore */ }
+    try { localStorage.setItem(LS_MSG, msg) } catch { /* ignore */ }
   }, [msg])
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      setContacts(await fetchContacts())
+      setError('')
+    } catch (err) {
+      setError(err.message || 'Could not load contacts. Did you run supabase/whatsapp_contacts.sql?')
+    } finally {
+      setLoading(false)
+    }
+  }
+  useEffect(() => { load() }, [])
 
   const waLink = (num) =>
     `https://wa.me/${num}${msg.trim() ? `?text=${encodeURIComponent(msg.trim())}` : ''}`
 
+  const categories = useMemo(
+    () => ['All', ...Array.from(new Set(contacts.map((c) => c.category))).sort()],
+    [contacts],
+  )
+
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase()
-    return WA_CONTACTS.filter((c) => {
+    return contacts.filter((c) => {
       if (tab !== 'All' && c.category !== tab) return false
-      if (hideDone && done[keyOf(c)]) return false
+      if (hideDone && c.contacted) return false
       if (!s) return true
-      return [c.name, c.cuisine, c.location, c.phone?.raw, c.alt?.raw]
+      return [c.name, c.cuisine, c.location, c.phone, c.alt_phone]
         .filter(Boolean)
         .some((v) => v.toLowerCase().includes(s))
     })
-  }, [tab, q, hideDone, done])
+  }, [contacts, tab, q, hideDone])
 
-  const doneCount = WA_CONTACTS.filter((c) => done[keyOf(c)]).length
+  const doneCount = contacts.filter((c) => c.contacted).length
+  const allVisibleSelected = rows.length > 0 && rows.every((c) => selected.has(c.id))
 
-  const toggle = (c) =>
-    setDone((d) => {
-      const k = keyOf(c)
-      const next = { ...d }
-      if (next[k]) delete next[k]
-      else next[k] = true
+  const onUpload = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const { rows: parsed, skippedSheets } = await parseContactsFile(file)
+      if (!parsed.length) throw new Error('No restaurants found. The file needs a "Name" and a "Phone" column.')
+      const { added, skipped } = await importContacts(parsed, contacts)
+      await load()
+      setNotice(
+        `${added} contact${added === 1 ? '' : 's'} added` +
+        (skipped ? `, ${skipped} already in the list` : '') +
+        (skippedSheets.length ? `. Sheet skipped: ${skippedSheets.join(', ')}` : '') + '.',
+      )
+    } catch (err) {
+      setError(err.message || 'Import failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const toggleDone = async (c) => {
+    const next = !c.contacted
+    setContacts((list) => list.map((x) => (x.id === c.id ? { ...x, contacted: next } : x)))
+    try {
+      await setContacted(c.id, next)
+    } catch (err) {
+      setContacts((list) => list.map((x) => (x.id === c.id ? { ...x, contacted: !next } : x)))
+      setError(err.message)
+    }
+  }
+
+  const toggleSelect = (id) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
 
-  const renderPhone = (p) => {
+  const toggleAllVisible = () =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (allVisibleSelected) rows.forEach((c) => next.delete(c.id))
+      else rows.forEach((c) => next.add(c.id))
+      return next
+    })
+
+  const runDelete = async () => {
+    const { ids } = confirm
+    setConfirm(null)
+    setBusy(true)
+    try {
+      await deleteContacts(ids)
+      setSelected((prev) => {
+        const next = new Set(prev)
+        ids.forEach((id) => next.delete(id))
+        return next
+      })
+      await load()
+      setNotice(`${ids.length} contact${ids.length === 1 ? '' : 's'} deleted.`)
+    } catch (err) {
+      setError(err.message || 'Delete failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const renderPhone = (raw) => {
+    const p = parsePhone(raw)
     if (!p) return null
     if (p.wa) {
       return (
         <a className="wa-btn" href={waLink(p.wa)} target="_blank" rel="noopener noreferrer">
           <Icon name="whatsapp" size={15} />
-          {p.raw.replace(/\s*\(.*?\)/g, '')}
+          {p.raw}
         </a>
       )
     }
@@ -83,11 +161,27 @@ export default function WhatsAppContacts() {
       <div className="page-head">
         <div>
           <h1 style={{ fontSize: 24 }}>WhatsApp contacts</h1>
-          <p>
-            {WA_CONTACTS.length} restaurants · {doneCount} contacted. Tap a number to open WhatsApp.
-          </p>
+          <p>{contacts.length} restaurants · {doneCount} contacted. Tap a number to open WhatsApp.</p>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {selected.size > 0 && (
+            <button
+              className="btn-danger"
+              disabled={busy}
+              onClick={() => setConfirm({ ids: [...selected], label: `${selected.size} selected contact${selected.size === 1 ? '' : 's'}` })}
+            >
+              <Icon name="trash" size={16} />&nbsp;Delete selected ({selected.size})
+            </button>
+          )}
+          <button className="btn-primary" disabled={busy} onClick={() => fileRef.current?.click()}>
+            <Icon name="upload" size={16} />&nbsp;{busy ? 'Working…' : 'Upload Excel'}
+          </button>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" hidden onChange={onUpload} />
         </div>
       </div>
+
+      {error && <p className="error-text" style={{ marginBottom: 12 }}>{error}</p>}
+      {notice && <div className="notice ok" style={{ marginBottom: 16 }}>{notice}</div>}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="field">
@@ -105,7 +199,7 @@ export default function WhatsAppContacts() {
       </div>
 
       <div className="tabs">
-        {TABS.map((t) => (
+        {categories.map((t) => (
           <button key={t} className={`tab${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>
             {t}
           </button>
@@ -113,27 +207,43 @@ export default function WhatsAppContacts() {
       </div>
 
       <div className="card">
-        {rows.length === 0 ? (
-          <div className="empty-state">No results.</div>
+        {loading ? (
+          <p>Loading…</p>
+        ) : rows.length === 0 ? (
+          <div className="empty-state">
+            {contacts.length === 0 ? 'No contacts yet. Click "Upload Excel" to add your list.' : 'No results.'}
+          </div>
         ) : (
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th style={{ width: 44 }}>Done</th>
+                  <th style={{ width: 36 }}>
+                    <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label="Select all shown" />
+                  </th>
+                  <th style={{ width: 60 }}>Done</th>
                   <th>Restaurant</th>
                   <th>WhatsApp</th>
                   <th>Category</th>
+                  <th style={{ width: 50 }} />
                 </tr>
               </thead>
               <tbody>
                 {rows.map((c) => (
-                  <tr key={keyOf(c)} className={done[keyOf(c)] ? 'row-banned' : ''}>
+                  <tr key={c.id} className={c.contacted ? 'row-banned' : ''}>
                     <td>
                       <input
                         type="checkbox"
-                        checked={!!done[keyOf(c)]}
-                        onChange={() => toggle(c)}
+                        checked={selected.has(c.id)}
+                        onChange={() => toggleSelect(c.id)}
+                        aria-label={`Select ${c.name}`}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={!!c.contacted}
+                        onChange={() => toggleDone(c)}
                         aria-label={`Mark ${c.name} as contacted`}
                       />
                     </td>
@@ -144,10 +254,20 @@ export default function WhatsAppContacts() {
                     <td>
                       <div className="wa-phones">
                         {renderPhone(c.phone)}
-                        {renderPhone(c.alt)}
+                        {renderPhone(c.alt_phone)}
                       </div>
                     </td>
                     <td><span className="badge-pill badge-pending">{c.category}</span></td>
+                    <td>
+                      <button
+                        className="icon-btn wa-del"
+                        title="Delete"
+                        aria-label={`Delete ${c.name}`}
+                        onClick={() => setConfirm({ ids: [c.id], label: c.name })}
+                      >
+                        <Icon name="trash" size={16} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -155,6 +275,17 @@ export default function WhatsAppContacts() {
           </div>
         )}
       </div>
+
+      {confirm && (
+        <ConfirmDialog
+          title="Delete contact"
+          message={`Delete ${confirm.label}? This cannot be undone.`}
+          confirmLabel="Delete"
+          danger
+          onConfirm={runDelete}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
     </AdminLayout>
   )
 }
