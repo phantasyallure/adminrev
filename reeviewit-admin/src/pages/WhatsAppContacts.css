@@ -1,0 +1,9 @@
+.wa-toolbar { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.wa-phones { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.wa-btn {
+  display: inline-flex; align-items: center; gap: 6px; background: #25d366; color: #fff;
+  padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; white-space: nowrap;
+  transition: filter .15s, transform .15s;
+}
+.wa-btn:hover { filter: brightness(.92); transform: translateY(-1px); }
+.wa-bad { font-size: 13px; color: #93630c; white-space: nowrap; }
